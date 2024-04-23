@@ -1,4 +1,4 @@
-module Functions_multiband
+module Functions_mb_chem
 
 using MKL 
 #using ThreadPinning
@@ -22,29 +22,27 @@ function __init__()
     TensorOperations.disable_cache()
 end
 =#
- 
+
 abstract type Simulation end
 name(s::Simulation) = string(typeof(s))
 
-struct Hubbard_MB_Simulation <: Simulation
+struct Hubbard_MBC_Simulation <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + BxB*range matrix for IS
     U::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + BxB*range matrix for IS
     J::Matrix{Float64}                        #convention: BxB matrix for OS (with OB zeros) + BxB*range matrix for IS
     μ::Array{Float64, 1}                      #convention: Bx1 array
-    P::Int64
-    Q::Int64
     svalue::Float64
     bond_dim::Int64
     kwargs
-    function Hubbard_MB_Simulation(t, U, J, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim = 50; kwargs...)
-        return new(t, U, J, μ, P, Q, svalue, bond_dim, kwargs)
+    function Hubbard_MBC_Simulation(t, u, J, μ, svalue=2.0, bond_dim = 50; kwargs...)
+        return new(t, u, J, μ, svalue, bond_dim, kwargs)
     end
 end
-name(::Hubbard_MB_Simulation) = "Hubbard_mb"    #give a different name
+name(::Hubbard_MBC_Simulation) = "Hubbard_mb_chem"    #give a different name
 
-function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1Irrep}})
-    parts = map(x -> sprint(show, x; context=:typeinfo => typeof(x)), s.sectors)
-    return "[fℤ₂×SU₂×U₁]$(parts)"
+
+function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep}})
+    return "Irrep[fℤ₂×SU₂]($(s.sectors[1].sector.n), $(s.sectors[2].j))"
 end
 
 
@@ -52,18 +50,18 @@ end
 # Hamiltonian #
 ###############
 
-function hopping(P,Q)   
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = Vect[I]((0, 0, -P) => 1, (0, 0, 2*Q-P) => 1, (1, 1 // 2, Q-P) => 1)
-    Vs = Vect[I]((1, 1 / 2, Q) => 1)
+function hopping()   
+    I = fℤ₂ ⊠ SU2Irrep
+    Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
+    Vs = Vect[I]((1, 1 / 2) => 1)
 
     c⁺ = TensorMap(zeros, ComplexF64, Ps ← Ps ⊗ Vs)
-    blocks(c⁺)[I((1, 1 // 2, Q-P))] .= 1
-    blocks(c⁺)[I((0, 0, 2*Q-P))] .= sqrt(2)
+    blocks(c⁺)[I((1, 1 // 2))] = [1.0+0.0im 0.0+0.0im]
+    blocks(c⁺)[I((0, 0))] = [0.0+0.0im; sqrt(2)+0.0im;;]
 
     c = TensorMap(zeros, ComplexF64, Vs ⊗ Ps ← Ps)
-    blocks(c)[I((1, 1 / 2, Q-P))] .= 1
-    blocks(c)[I((0, 0, 2*Q-P))] .= sqrt(2)
+    blocks(c)[I((1, 1 // 2))] = [1.0+0.0im; 0.0+0.0im;;]
+    blocks(c)[I((0, 0))] = [0.0+0.0im sqrt(2)+0.0im]
 
     @planar twosite_hopping[-1 -2; -3 -4] := c⁺[-1; -3 1] * c[1 -2; -4]
     
@@ -71,7 +69,7 @@ function hopping(P,Q)
 end
 
 # t[i,j] gives the hopping of band i on one site to band j on the same site (i≠j)
-function OS_hopping(t,P,Q)
+function OS_hopping(t)
     Bands,Bands2 = size(t)
     
     if Bands ≠ Bands2 || typeof(t) ≠ Matrix{Float64}
@@ -86,18 +84,12 @@ function OS_hopping(t,P,Q)
         @warn "On-band hopping is not taken into account in OS_hopping."
     end
     
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
-    
-    cdc,_ = hopping(P,Q)
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    cdc,_ = hopping()
+    Lattice = InfiniteStrip(Bands,Bands)
         
     # Define necessary different indices of sites/orbitals in the lattice
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
-               for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
+               for l in 1:(Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
     return @mpoham sum(-t[bi,bf]*cdc{Lattice[bf,site],Lattice[bi,site]} for (site, bi, bf) in Indices)
 end
@@ -105,76 +97,58 @@ end
 # t[i,j] gives the hopping of band i on one site to band j on the range^th next site
 # parameter must be equal in both directions (1i->2j=2j->1i) to guarantee hermiticity
 # Translation invariance implies then that we should have t'=t (unless due to geometry like for 6-band model)
-function IS_hopping(t,range,P,Q)
+function IS_hopping(t,range)
     Bands,Bands2 = size(t)
     if Bands ≠ Bands2 || typeof(t) ≠ Matrix{Float64}
         @warn "t is not a float square matrix"
     end
     
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
-    
-    cdc, ccd = hopping(P,Q)
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    cdc, ccd = hopping()
+    Lattice = InfiniteStrip(Bands,Bands)
         
     # Define necessary different indices of sites/orbitals in the lattice
-    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
+    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(Bands^2)]
     
     return @mpoham sum(-t[bi,bf]*(cdc{Lattice[bf,site+range],Lattice[bi,site]} + 
                         ccd{Lattice[bf,site+range],Lattice[bi,site]}) for (site, bi, bf) in Indices)
 end
 
 # μ[i] gives the hopping of band i on one site to band i on the same site, combine this one with OB_hopping?
-function Chem_pot(μ,P,Q)
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = Vect[I]((0, 0, -P) => 1, (0, 0, 2*Q-P) => 1, (1, 1 // 2, Q-P) => 1)
+function Chem_pot(μ)
+    I = fℤ₂ ⊠ SU2Irrep
+    Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
 
     n = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(n)[I((0, 0, 2*Q-P))] .= 2
-    blocks(n)[I((1, 1 // 2, Q-P))] .= 1
+    blocks(n)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 2.0]
+    blocks(n)[I((1, 1 // 2))] .= 1.0+0.0im
     
     Bands = length(μ)
     
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    Lattice = InfiniteStrip(Bands,Bands)
     
-    Lattice = InfiniteStrip(Bands,T*Bands)
-    
-    Indices = [(div(l-1,Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands)]
+    Indices = [(div(l-1,Bands)+1, mod(l-1,Bands)+1) for l in 1:(Bands)]
     
     return @mpoham sum(-μ[i]*n{Lattice[i,j]} for (j,i) in Indices)
 end
 
 # u[i] gives the interaction on band i
-function OB_interaction(u,P,Q)
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = Vect[I]((0, 0, -P) => 1, (0, 0, 2*Q-P) => 1, (1, 1 // 2, Q-P) => 1)
+function OB_interaction(u)
+    I = fℤ₂ ⊠ SU2Irrep
+    Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
     
     Bands = length(u)
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
-    
+
     onesite = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(onesite)[I((0, 0, 2*Q-P))] .= 1
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    blocks(onesite)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 1.0] 
+    Lattice = InfiniteStrip(Bands,Bands)
     
-    Indices = [(div(l-1,Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands)]
+    Indices = [(div(l-1,Bands)+1, mod(l-1,Bands)+1) for l in 1:(Bands)]
     
     return @mpoham sum(u[i]*onesite{Lattice[i,j]} for (j,i) in Indices)
 end
 
 # U[i,j] gives the direct interaction between band i on one site to band j on the same site. Averaged over U[i,j] and U[j,i]
-function Direct_OS(U,P,Q)
+function Direct_OS(U)
     Bands,Bands2 = size(U)
     
     if Bands ≠ Bands2 || typeof(U) ≠ Matrix{Float64}
@@ -188,31 +162,24 @@ function Direct_OS(U,P,Q)
         end
     end
     
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = Vect[I]((0, 0, -P) => 1, (0, 0, 2*Q-P) => 1, (1, 1 // 2, Q-P) => 1)
-    #Vs = Vect[I]((1, 1 / 2, Q) => 1)
+    I = fℤ₂ ⊠ SU2Irrep
+    Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
     
     n = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(n)[I((0, 0, 2*Q-P))] .= 2
-    blocks(n)[I((1, 1 // 2, Q-P))] .= 1
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    blocks(n)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 2.0]
+    blocks(n)[I((1, 1 // 2))] .= 1.0+0.0im
     
     @planar nn[-1 -2; -3 -4] := n[-1; -3] * n[-2; -4]
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    Lattice = InfiniteStrip(Bands,Bands)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
-               for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
+               for l in 1:(Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
     return @mpoham sum(U_av[bi,bf]*nn{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices if U_av[bi,bf]≠0.0)
 end
 
 # J[i,j] gives the exchange interaction between band i on one site to band j on the same site.
-function Exchange1_OS(J,P,Q)
+function Exchange1_OS(J)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
@@ -227,24 +194,18 @@ function Exchange1_OS(J,P,Q)
         @warn "On-band interaction is not taken into account in Exchange_OS."
     end
     
-    cdc,_ = hopping(P,Q)
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    cdc,_ = hopping()
     
     @tensor C4[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[-2 3; 2 -3]
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    Lattice = InfiniteStrip(Bands,Bands)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
-               for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
+               for l in 1:(Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
     return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
 end;
 
-function Exchange2_OS(J,P,Q)
+function Exchange2_OS(J)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
@@ -259,107 +220,80 @@ function Exchange2_OS(J,P,Q)
         @warn "On-band interaction is not taken into account in Exchange_OS."
     end
     
-    cdc,_ = hopping(P,Q)
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    cdc,_ = hopping()
     
     @tensor C4[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[3 -2; -3 2]
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    Lattice = InfiniteStrip(Bands,Bands)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
-               for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
+               for l in 1:(Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
     return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
 end;
 
 # V[i,j] gives the direct interaction between band i on one site to band j on the range^th next site.
-function Direct_IS(V,range,P,Q)
+function Direct_IS(V,range)
     Bands,Bands2 = size(V)
     
     if Bands ≠ Bands2 || typeof(V) ≠ Matrix{Float64}
         @warn "V is not a float square matrix"
     end
     
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = Vect[I]((0, 0, -P) => 1, (0, 0, 2*Q-P) => 1, (1, 1 // 2, Q-P) => 1)
-    #Vs = Vect[I]((1, 1 / 2, Q) => 1)
+    I = fℤ₂ ⊠ SU2Irrep
+    Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
     
     n = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(n)[I((0, 0, 2*Q-P))] .= 2
-    blocks(n)[I((1, 1 // 2, Q-P))] .= 1
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    blocks(n)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 2.0]
+    blocks(n)[I((1, 1 // 2))] .= 1.0+0.0im
     
     @planar nn[-1 -2; -3 -4] := n[-1; -3] * n[-2; -4]
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    Lattice = InfiniteStrip(Bands,Bands)
     
-    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
+    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(Bands^2)]
     
     return @mpoham sum(V[bi,bf]*nn{Lattice[bi,site],Lattice[bf,site+range]} for (site,bi,bf) in Indices)
 end
 
 # J[i,j] gives the exchange interaction between band i on one site to band j on the range^th next site.
-function Exchange1_IS(J,range,P,Q)
+function Exchange1_IS(J,range)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
         @warn "J is not a float square matrix"
     end
     
-    cdc,_ = hopping(P,Q)
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    cdc,_ = hopping()
     
     @tensor C4[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[-2 3; 2 -3]
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    Lattice = InfiniteStrip(Bands,Bands)
     
-    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
+    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(Bands^2)]
     
     return @mpoham sum(J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} for (site,bi,bf) in Indices)    # operator has no direction
 end;
 
-function Exchange2_IS(J,range,P,Q)
+function Exchange2_IS(J,range)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
         @warn "J is not a float square matrix"
     end
     
-    cdc,_ = hopping(P,Q)
-    
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+    cdc,_ = hopping()
     
     @tensor C4[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[3 -2; -3 2]
-    Lattice = InfiniteStrip(Bands,T*Bands)
+    Lattice = InfiniteStrip(Bands,Bands)
     
-    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
+    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(Bands^2)]
     
     return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J[bi,bf]*C4{Lattice[bi,site+range],Lattice[bf,site]} for (site,bi,bf) in Indices) #operator has direction
 end;
 
-function hamiltonian_mb(simul::Hubbard_MB_Simulation)
+function hamiltonian_mb(simul::Hubbard_MBC_Simulation)
     t = simul.t
     u = simul.U
     J = simul.J
     μ = simul.μ
-    P = simul.P
-    Q = simul.Q
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
@@ -381,22 +315,22 @@ function hamiltonian_mb(simul::Hubbard_MB_Simulation)
     if u_OB == zeros(Bands)
         @warn "No on-band interaction found. This may lead to too low contributions of other Hamiltonian terms."
     end
-    H_total = OB_interaction(u_OB,P,Q)
+    H_total = OB_interaction(u_OB)
 
     t_OS = t[:,1:Bands]
     if t_OS != zeros(Bands,Bands)
-        H_total += OS_hopping(t_OS,P,Q)
+        H_total += OS_hopping(t_OS)
     end
 
     for i in 1:Range_t
         t_IS = t[:,(Bands*i+1):(Bands*(i+1))]
         if t_IS != zeros(Bands,Bands)
-            H_total += IS_hopping(t_IS,i,P,Q)
+            H_total += IS_hopping(t_IS,i)
         end
     end
 
     if μ != zeros(Bands)
-        H_total += Chem_pot(μ,P,Q)
+        H_total += Chem_pot(μ)
     end
 
     u_OS = u[:,1:Bands]
@@ -404,25 +338,25 @@ function hamiltonian_mb(simul::Hubbard_MB_Simulation)
         u_OS[i,i] = 0.0
     end
     if u_OS != zeros(Bands,Bands)
-        H_total += Direct_OS(u_OS,P,Q)
+        H_total += Direct_OS(u_OS)
     end
 
     for i in 1:Range_u
         V = u[:,(Bands*i+1):(Bands*(i+1))]
         if V != zeros(Bands,Bands)
-            H_total += Direct_IS(V,i,P,Q)
+            H_total += Direct_IS(V,i)
         end
     end
 
     J_OS = J[:,1:Bands]
     if J_OS != zeros(Bands,Bands)
-        H_total += Exchange1_OS(J_OS,P,Q) + Exchange2_OS(J_OS,P,Q)
+        H_total += Exchange1_OS(J_OS) + Exchange2_OS(J_OS)
     end
 
     for i in 1:Range_J
         J_IS = J[:,(Bands*i+1):(Bands*(i+1))]
         if J_IS != zeros(Bands,Bands)
-            H_total += Exchange1_IS(J_IS,i,P,Q) + Exchange2_IS(J_IS,i,P,Q) + H_exch_IS
+            H_total += Exchange1_IS(J_IS,i) + Exchange2_IS(J_IS,i) + H_exch_IS
         end
     end
 
@@ -434,8 +368,8 @@ end
 # Groundstate #
 ###############
 
-# Ps is now vector of length (2)Q*Bands
-function initialize_mps(operator, P, max_dimension)
+# Ps is now vector of length Bands
+function initialize_mps(operator, max_dimension)
     Ps = operator.pspaces
     L = length(Ps)
     V_right = accumulate(fuse, Ps)
@@ -448,13 +382,11 @@ function initialize_mps(operator, P, max_dimension)
 
     V = TensorKit.infimum.(V_left, V_right)
 
-    Vmax = Vect[(FermionParity ⊠ Irrep[SU₂] ⊠ Irrep[U₁])]((0,0,0)=>1)     # find maximal virtual space
+    Vmax = Vect[(FermionParity ⊠ Irrep[SU₂])]((0,0)=>1)     # find maximal virtual space
 
     for i in 0:1
         for j in 0:1//2:3//2
-            for k in -(L*P):1:(L*P)
-                Vmax = Vect[(FermionParity ⊠ Irrep[SU₂] ⊠ Irrep[U₁])]((i,j,k)=>max_dimension) ⊕ Vmax
-            end
+            Vmax = Vect[(FermionParity ⊠ Irrep[SU₂])]((i,j)=>max_dimension) ⊕ Vmax
         end
     end
 
@@ -469,9 +401,9 @@ function initialize_mps(operator, P, max_dimension)
     return InfiniteMPS(Ps, V_trunc)
 end
 
-function compute_groundstate(simul::Hubbard_MB_Simulation)
+function compute_groundstate(simul::Hubbard_MBC_Simulation)
     H = hamiltonian_mb(simul)
-    ψ₀ = initialize_mps(H,simul.P,simul.bond_dim)
+    ψ₀ = initialize_mps(H,simul.bond_dim)
     
     kwargs = simul.kwargs
     
@@ -495,7 +427,7 @@ function compute_groundstate(simul::Hubbard_MB_Simulation)
     return Dict("groundstate" => ψ, "environments" => envs, "ham" => H, "delta" => δ, "config" => simul)
 end
 
-function produce_groundstate(simul::Hubbard_MB_Simulation; force=false)
+function produce_groundstate(simul::Hubbard_MBC_Simulation; force=false)
     band = length(simul.μ)
     code = get(simul.kwargs, :code, "bands=$band")
     data, _ = produce_or_load(compute_groundstate, simul, datadir("sims", name(simul)); prefix="groundstate_"*code, force=force)
@@ -510,113 +442,38 @@ end
 # would be nice if we could load first excitations and only calculate the higher excitations that were not produced yet
 # Krylovkit does not support this yet
 
-function compute_excitations_pos(simul::Hubbard_MB_Simulation, momenta, nums::Int64; tol=1e-10, trunc_dim::Int64=0, trunc_scheme::Int64=0, solver=GMRES())
+function compute_excitations(simul::Hubbard_MBC_Simulation, momenta, nums::Int64; tol=1e-10, trunc_dim::Int64=0, solver=GMRES())
     if trunc_dim<0
         return error("Trunc_dim should be a positive integer.")
     end
 
-    Q = simul.Q
-    sector = fℤ₂(1) ⊠ SU2Irrep(1 // 2) ⊠ U1Irrep(Q)
+    sector = fℤ₂(1) ⊠ SU2Irrep(1 // 2)
     dictionary = produce_groundstate(simul)
     ψ = dictionary["groundstate"]
     H = dictionary["ham"]
     if trunc_dim==0
         envs = dictionary["environments"]
     else
-        dict_trunc = produce_TruncState(simul, trunc_dim; trunc_scheme=trunc_scheme)
-        ψ = dict_trunc["ψ_trunc"]
-        envs = dict_trunc["envs_trunc"]
-    end
-    Es, qps = excitations(H, QuasiparticleAnsatz(; tol=tol), momenta./length(H), ψ, envs; num=nums, sector=sector, solver=solver)
-    return Dict("Es_pos" => Es, "qps_pos" => qps, "momenta" => momenta)
-end
-
-function produce_excitations_pos(simul::Hubbard_MB_Simulation, momenta, nums::Int64; force=false, tol=1e-10, trunc_dim::Int64=0, trunc_scheme::Int64=0, solver=GMRES())
-    band = length(simul.μ)
-    if typeof(momenta)==Float64
-        momenta_string = "_mom=$momenta"
-    else
-        mom_1 = first(momenta)
-        mom_last = last(momenta)
-        mom_length = length(momenta)
-        momenta_string = "_mom=$mom_1 to$mom_last div$mom_length"
-        momenta_string = replace(momenta_string, " " => "" )
-    end
-    code = get(simul.kwargs, :code, "bands=$band")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_pos_"*code*"_nums=$nums"*"_tol=$tol"*"_trunc=$trunc_dim"*momenta_string, force=force) do cfg
-        return compute_excitations_pos(cfg, momenta, nums; tol=tol, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, solver=solver)
-    end
-    return data
-end
-
-function compute_excitations_neg(simul::Hubbard_MB_Simulation, momenta, nums::Int64; tol=1e-10, trunc_dim::Int64=0, trunc_scheme::Int64=0, solver=GMRES())
-    if trunc_dim<0
-        return error("trunc_dim should be a positive integer.")
-    end
-    
-    Q = simul.Q
-    sector = fℤ₂(1) ⊠ SU2Irrep(1 // 2) ⊠ U1Irrep(-Q)
-    dictionary = produce_groundstate(simul)
-    ψ = dictionary["groundstate"]
-    H = dictionary["ham"]
-    if trunc_dim==0
-        envs = dictionary["environments"]
-    else
-        dict_trunc = produce_TruncState(simul, trunc_dim; trunc_scheme=trunc_scheme)
-        ψ = dict_trunc["ψ_trunc"]
-        envs = dict_trunc["envs_trunc"]
-    end
-    Es, qps = excitations(H, QuasiparticleAnsatz(; tol=tol), momenta./length(H), ψ, envs; num=nums, sector=sector, solver=solver)
-    return Dict("Es_neg" => Es, "qps_neg" => qps, "momenta" => momenta)
-end
-
-function produce_excitations_neg(simul::Hubbard_MB_Simulation, momenta, nums::Int64; force=false, tol=1e-10, trunc_dim::Int64=0, trunc_scheme::Int64=0, solver=GMRES())
-    band = length(simul.μ)
-    if typeof(momenta)==Float64
-        momenta_string = "_mom=$momenta"
-    else 
-        mom_1 = first(momenta)
-        mom_last = last(momenta)
-        mom_length = length(momenta)
-        momenta_string = "_mom=$mom_1 to$mom_last div$mom_length"
-        momenta_string = replace(momenta_string, " " => "" )
-    end
-    code = get(simul.kwargs, :code, "bands=$band")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_neg_"*code*"_nums=$nums"*"_tol=$tol"*"_trunc=$trunc_dim"*momenta_string, force=force) do cfg
-        return compute_excitations_neg(cfg, momenta, nums; tol=tol, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, solver=solver)
-    end
-    return data
-end
-
-
-##############
-# Truncation #
-##############
-
-function TruncState(simul::Hubbard_MB_Simulation, trunc_dim::Int64; trunc_scheme::Int64=0)
-    if trunc_dim<=0
-        return error("trunc_dim should be a positive integer.")
-    end
-    if trunc_scheme!=0 && trunc_scheme!=1
-        return error("trunc_scheme should be either 0 (VUMPSSvdCut) or 1 (SvdCut).")
-    end
-
-    dictionary = produce_groundstate(simul)
-    ψ = dictionary["groundstate"]
-    H = dictionary["ham"]
-    if trunc_scheme==0
         ψ, envs = changebonds(ψ,H,VUMPSSvdCut(; trscheme=truncdim(trunc_dim)))
-    else
-        ψ, envs = changebonds(ψ,H,SvdCut(; trscheme=truncdim(trunc_dim)))
     end
-    return  Dict("ψ_trunc" => ψ, "envs_trunc" => envs)
+    Es, qps = excitations(H, QuasiparticleAnsatz(; tol=tol), momenta./length(H), ψ, envs; num=nums, sector=sector, solver=solver)
+    return Dict("Es" => Es, "qps" => qps, "momenta" => momenta)
 end
 
-function produce_TruncState(simul::Hubbard_MB_Simulation, trunc_dim::Int64; trunc_scheme::Int64=0, force=false)
+function produce_excitations(simul::Hubbard_MBC_Simulation, momenta, nums::Int64; force=false, tol=1e-10, trunc_dim::Int64=0, solver=GMRES())
     band = length(simul.μ)
+    if typeof(momenta)==Float64
+        momenta_string = "_mom=$momenta"
+    else
+        mom_1 = first(momenta)
+        mom_last = last(momenta)
+        mom_length = length(momenta)
+        momenta_string = "_mom=$mom_1 to$mom_last div$mom_length"
+        momenta_string = replace(momenta_string, " " => "" )
+    end
     code = get(simul.kwargs, :code, "bands=$band")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="Trunc_GS_"*code*"_dim=$trunc_dim"*"_scheme=$trunc_scheme", force=force) do cfg
-        return TruncState(cfg, trunc_dim; trunc_scheme=trunc_scheme)
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_"*code*"_nums=$nums"*"_tol=$tol"*"_trunc=$trunc_dim"*momenta_string, force=force) do cfg
+        return compute_excitations(cfg, momenta, nums; tol=tol, trunc_dim=trunc_dim, solver=solver)
     end
     return data
 end
@@ -626,84 +483,24 @@ end
 # State properties #
 ####################
 
-function density_state(simul::Hubbard_MB_Simulation)
-    P = simul.P;
-    Q = simul.Q
-    Bands = length(simul.μ)
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
+function density_state(ψ₀)
+    Bands = length(ψ₀)
 
-    dictionary = produce_groundstate(simul);
-    ψ₀ = dictionary["groundstate"];
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = physicalspace(ψ₀, 1)
+    I = fℤ₂ ⊠ SU2Irrep
+    Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
 
     n = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(n)[I((0, 0, 2*Q-P))] .= 2
-    blocks(n)[I((1, 1 // 2, Q-P))] .= 1
-    blocks(n)[I((0, 0, -P))] .= 0
+    blocks(n)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 2.0]
+    blocks(n)[I((1, 1 // 2))] .= 1.0+0.0im
 
-    nₑ = @mpoham sum(n{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
-    Nₑ = zeros(Bands*T,1);
+    nₑ = @mpoham sum(n{i} for i in vertices(InfiniteStrip(Bands,Bands)))
+    Nₑ = zeros(Bands,1);
 
-    for i in 1:(Bands*T)
+    for i in 1:(Bands)
         Nₑ[i] = real(expectation_value(ψ₀, nₑ)[i])
     end
-    
-    N_av = zeros(Bands,1)
-    for i in 1:Bands
-        av = 0
-        for j in 0:(T-1)
-            av = Nₑ[i+Bands*j] + av
-        end
-        N_av[i] = av/T
-    end
 
-    check = (sum(Nₑ)/(T*Bands) ≈ P/Q)
-    println("Filling is conserved: $check")
-
-    return N_av
-end
-
-function density_state(ψ₀,P::Int64,Q::Int64)
-    if iseven(P)
-        T = Q
-    else 
-        T = 2*Q
-    end
-    Bands = Int(length(ψ₀)/T)
-
-    I = fℤ₂ ⊠ SU2Irrep ⊠ U1Irrep
-    Ps = physicalspace(ψ₀, 1)
-
-    n = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(n)[I((0, 0, 2*Q-P))] .= 2
-    blocks(n)[I((1, 1 // 2, Q-P))] .= 1
-    blocks(n)[I((0, 0, -P))] .= 0
-
-    nₑ = @mpoham sum(n{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
-    Nₑ = zeros(Bands*T,1);
-
-    for i in 1:(Bands*T)
-        Nₑ[i] = real(expectation_value(ψ₀, nₑ)[i])
-    end
-    
-    N_av = zeros(Bands,1)
-    for i in 1:Bands
-        av = 0
-        for j in 0:(T-1)
-            av = Nₑ[i+Bands*j] + av
-        end
-        N_av[i] = av/T
-    end
-
-    check = (sum(Nₑ)/(T*Bands) ≈ P/Q)
-    println("Filling is conserved: $check")
-
-    return N_av
+    return Nₑ
 end
 
 function dim_state(ψ)
