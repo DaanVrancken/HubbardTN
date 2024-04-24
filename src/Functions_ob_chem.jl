@@ -50,7 +50,7 @@ end
 # Groundstate #
 ###############
 
-function hamiltonian_csb(t::Vector{Float64}, u::Vector{Float64}, μ::Float64, L::Int64)
+function hamiltonian_sb(t::Vector{Float64}, u::Vector{Float64}, μ::Float64, L::Int64)
     D_hop = length(t)
     D_int = length(u)
     
@@ -164,6 +164,7 @@ function compute_groundstate(simul::Hubbard_Chem_Simulation)
 
     if simul.μ !== nothing
         dictionary = compute_groundstate(simul, simul.μ);
+        dictionary["μ"] = simul.μ
     else 
         P = simul.P
         Q = simul.Q
