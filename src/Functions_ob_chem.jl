@@ -291,8 +291,9 @@ function produce_excitations(simul::Hubbard_Chem_Simulation, momenta, nums::Int6
     else
         momenta_string = "_mom=$(first(momenta))to$(last(momenta))div$(length(momenta))"
     end
+    charge_string = "f$(Int(charges[1]))su$(charges[2])"
     code = get(simul.kwargs, :code, "bands=$band")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_"*code*"_nums=$nums"*"charges=$charges"*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_"*code*"_nums=$nums"*"charges="*charge_string*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
         return compute_excitations(cfg, momenta, nums; charges=charges, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, solver=solver)
     end
     return data
@@ -304,33 +305,33 @@ end
 ##############
 
 function TruncState(simul::Hubbard_Chem_Simulation, trunc_dim::Int64; 
-trunc_scheme::Int64=0)
-if trunc_dim<=0
-return error("trunc_dim should be a positive integer.")
-end
-if trunc_scheme!=0 && trunc_scheme!=1
-return error("trunc_scheme should be either 0 (VUMPSSvdCut) or 1 (SvdCut).")
-end
+                            trunc_scheme::Int64=0)
+    if trunc_dim<=0
+        return error("trunc_dim should be a positive integer.")
+    end
+    if trunc_scheme!=0 && trunc_scheme!=1
+        return error("trunc_scheme should be either 0 (VUMPSSvdCut) or 1 (SvdCut).")
+    end
 
-dictionary = produce_groundstate(simul)
-ψ = dictionary["groundstate"]
-H = dictionary["ham"]
-if trunc_scheme==0
-ψ, envs = changebonds(ψ,H,VUMPSSvdCut(; trscheme=truncdim(trunc_dim)))
-else
-ψ, envs = changebonds(ψ,H,SvdCut(; trscheme=truncdim(trunc_dim)))
-end
-return  Dict("ψ_trunc" => ψ, "envs_trunc" => envs)
+    dictionary = produce_groundstate(simul)
+    ψ = dictionary["groundstate"]
+    H = dictionary["ham"]
+    if trunc_scheme==0
+        ψ, envs = changebonds(ψ,H,VUMPSSvdCut(; trscheme=truncdim(trunc_dim)))
+    else
+        ψ, envs = changebonds(ψ,H,SvdCut(; trscheme=truncdim(trunc_dim)))
+    end
+    return  Dict("ψ_trunc" => ψ, "envs_trunc" => envs)
 end
 
 function produce_TruncState(simul::Hubbard_Chem_Simulation, trunc_dim::Int64; 
-    trunc_scheme::Int64=0, force=false)
-band = length(simul.μ)
-code = get(simul.kwargs, :code, "bands=$band")
-data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="Trunc_GS_"*code*"_dim=$trunc_dim"*"_scheme=$trunc_scheme", force=force) do cfg
-return TruncState(cfg, trunc_dim; trunc_scheme=trunc_scheme)
-end
-return data
+                                    trunc_scheme::Int64=0, force=false)
+    band = length(simul.μ)
+    code = get(simul.kwargs, :code, "bands=$band")
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="Trunc_GS_"*code*"_dim=$trunc_dim"*"_scheme=$trunc_scheme", force=force) do cfg
+        return TruncState(cfg, trunc_dim; trunc_scheme=trunc_scheme)
+    end
+    return data
 end
 
 
