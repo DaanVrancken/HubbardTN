@@ -9,16 +9,14 @@ using Printf
 using Plots
 using Revise
 using DrWatson
-using JSON
 using Plots.PlotMeasures
 using ThreadPinning
+
 LinearAlgebra.BLAS.set_num_threads(1)
 ThreadPinning.pinthreads(:cores)
-ThreadPinning.threadinfo(; blas=true, hints=true)
+#ThreadPinning.threadinfo(; blas=true, hints=true)
 
 @quickactivate "Hubbard"
-
-
 
 include(projectdir("src", "Functions_multiband.jl"))
 import .Functions_multiband as fm

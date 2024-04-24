@@ -53,7 +53,7 @@ u = cat(u_OS, u_IS, dims=2);
 J_OS = [0.0 0.337 0.316; 0.337 0.0 0.340; 0.316 0.340 0.0];
 J = [J_OS Z; Z J_OS];
 
-model = fm.Hubbard_MB_Simulation(t, u, J, μ, P, Q, 2.5, bond_dim; verbosity=0, code = name);
+model = fm.Hubbard_MB_Simulation(t, u, J, μ, P, Q, 2.5, bond_dim; code = name);
 
 
 ########################

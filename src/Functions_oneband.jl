@@ -147,7 +147,7 @@ function compute_groundstate(simul::Hubbard_Simulation)
     kwargs = simul.kwargs
     
     tol = get(kwargs, :tol, 1e-10)
-    verbosity = get(kwargs, :verbosity, 3)
+    verbosity = get(kwargs, :verbosity, 0)
     maxiter = get(kwargs, :maxiter, Int(1e3))
     
     schmidtcut = 10.0^(-simul.svalue)
@@ -183,49 +183,78 @@ end
 # Excitations #
 ###############
  
-# would be nice if we could load first excitations and only calculate the higher excitations that were not produced yet
-# the function "excitations" does not support this I think...
+function compute_excitations(simul::Hubbard_Simulation, momenta, nums::Int64; 
+                                    charges::Vector{Float64}=[1,1/2,1], 
+                                    trunc_dim::Int64=0, trunc_scheme::Int64=0, 
+                                    solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
+    if trunc_dim<0
+        return error("Trunc_dim should be a positive integer.")
+    end
 
-function compute_excitations_pos(simul::Hubbard_Simulation, momenta, nums::Int64; tol=1e-10, solver=GMRES())
     Q = simul.Q
-    sector = fℤ₂(1) ⊠ SU2Irrep(1 // 2) ⊠ U1Irrep(Q)
+    sector = fℤ₂(charges[1]) ⊠ SU2Irrep(charges[2]) ⊠ U1Irrep(charges[3]*Q)
     dictionary = produce_groundstate(simul)
     ψ = dictionary["groundstate"]
     H = dictionary["ham"]
-    envs = dictionary["environments"]
-    Es, qps = excitations(H, QuasiparticleAnsatz(; tol=tol), momenta./length(H), ψ, envs; num=nums, sector=sector, solver=solver)
-    return Dict("Es_pos" => Es, "qps_pos" => qps, "momenta" => momenta)
+    if trunc_dim==0
+        envs = dictionary["environments"]
+    else
+        dict_trunc = produce_TruncState(simul, trunc_dim; trunc_scheme=trunc_scheme)
+        ψ = dict_trunc["ψ_trunc"]
+        envs = dict_trunc["envs_trunc"]
+    end
+    Es, qps = excitations(H, QuasiparticleAnsatz(solver), momenta./length(H), ψ, envs; num=nums, sector=sector)
+    return Dict("Es" => Es, "qps" => qps, "momenta" => momenta)
 end
 
-function produce_excitations_pos(simul::Hubbard_Simulation, momenta, nums::Int64; force=false, tol=1e-10, solver=GMRES())
-    t = simul.t 
-    u = simul.u
-    S = "excitations_pos_nums=$nums"*"_t$t"*"_u$u"
-    S = replace(S, ", " => "_")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix=S, force=force) do cfg
-        return compute_excitations_pos(cfg, momenta, nums; tol=tol, solver=solver)
+function produce_excitations(simul::Hubbard_Simulation, momenta, nums::Int64; 
+                                    force=false, charges::Vector{Float64}=[1,1/2,1], 
+                                    trunc_dim::Int64=0, trunc_scheme::Int64=0, 
+                                    solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
+    band = length(simul.μ)
+    if typeof(momenta)==Float64
+        momenta_string = "_mom=$momenta"
+    else
+        momenta_string = "_mom=$(first(momenta))to$(last(momenta))div$(length(momenta))"
+    end
+    code = get(simul.kwargs, :code, "bands=$band")
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_"*code*"_nums=$nums"*"charges=$charges"*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
+        return compute_excitations(cfg, momenta, nums; charges=charges, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, solver=solver)
     end
     return data
 end
 
-function compute_excitations_neg(simul::Hubbard_Simulation, momenta, nums::Int64; tol=1e-10, solver=GMRES())
-    Q = simul.Q
-    sector = fℤ₂(1) ⊠ SU2Irrep(1 // 2) ⊠ U1Irrep(-Q)
+
+##############
+# Truncation #
+##############
+
+function TruncState(simul::Hubbard_Simulation, trunc_dim::Int64; 
+                            trunc_scheme::Int64=0)
+    if trunc_dim<=0
+        return error("trunc_dim should be a positive integer.")
+    end
+    if trunc_scheme!=0 && trunc_scheme!=1
+        return error("trunc_scheme should be either 0 (VUMPSSvdCut) or 1 (SvdCut).")
+    end
+
     dictionary = produce_groundstate(simul)
     ψ = dictionary["groundstate"]
     H = dictionary["ham"]
-    envs = dictionary["environments"]
-    Es, qps = excitations(H, QuasiparticleAnsatz(; tol=tol), momenta./length(H), ψ, envs; num=nums, sector=sector, solver=solver)
-    return Dict("Es_neg" => Es, "qps_neg" => qps, "momenta" => momenta)
+    if trunc_scheme==0
+        ψ, envs = changebonds(ψ,H,VUMPSSvdCut(; trscheme=truncdim(trunc_dim)))
+    else
+        ψ, envs = changebonds(ψ,H,SvdCut(; trscheme=truncdim(trunc_dim)))
+    end
+    return  Dict("ψ_trunc" => ψ, "envs_trunc" => envs)
 end
 
-function produce_excitations_neg(simul::Hubbard_Simulation, momenta, nums::Int64; force=false, tol=1e-10, solver=GMRES())
-    t = simul.t 
-    u = simul.u
-    S = "excitations_neg_nums=$nums"*"_t$t"*"_u$u"
-    S = replace(S, ", " => "_")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix=S, force=force) do cfg
-        return compute_excitations_neg(cfg, momenta, nums; tol=tol, solver=solver)
+function produce_TruncState(simul::Hubbard_Simulation, trunc_dim::Int64; 
+                                    trunc_scheme::Int64=0, force=false)
+    band = length(simul.μ)
+    code = get(simul.kwargs, :code, "bands=$band")
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="Trunc_GS_"*code*"_dim=$trunc_dim"*"_scheme=$trunc_scheme", force=force) do cfg
+        return TruncState(cfg, trunc_dim; trunc_scheme=trunc_scheme)
     end
     return data
 end

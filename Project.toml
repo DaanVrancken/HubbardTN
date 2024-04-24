@@ -1,7 +1,13 @@
-name = "Hubbard"
 authors = ["DaanVrancken"]
+name = "Hubbard"
+
 [compat]
-julia = "1.9.3"
 DrWatson = "2.13.0"
+julia = "1.9.3"
+
 [deps]
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+
+[extras]
+ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
