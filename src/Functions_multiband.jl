@@ -1,7 +1,7 @@
 module Functions_multiband
 
 using MKL 
-#using ThreadPinning
+using ThreadPinning
 using LinearAlgebra
 using MPSKit, MPSKitModels
 using TensorKit
@@ -13,15 +13,10 @@ using QuadGK, SpecialFunctions
 using TensorOperations
 using Revise
 
-
-#=
 function __init__()
-    ThreadPinning.mkl_set_dynamic(0)
-    BLAS.set_num_threads(1)
-    pinthreads(:affinitymask)
-    TensorOperations.disable_cache()
+    LinearAlgebra.BLAS.set_num_threads(1)
+    ThreadPinning.pinthreads(:cores)
 end
-=#
  
 abstract type Simulation end
 name(s::Simulation) = string(typeof(s))

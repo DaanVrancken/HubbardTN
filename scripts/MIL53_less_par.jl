@@ -17,12 +17,10 @@ using Plots.PlotMeasures
 
 @quickactivate "Hubbard"
 
-LinearAlgebra.BLAS.set_num_threads(1)
-ThreadPinning.pinthreads(:cores)
-
 include(projectdir("src", "Functions_multiband.jl"))
 import .Functions_multiband as fm
 
+# Extract name of the current file. Will be used as code name for the simulation.
 name_jl = last(splitpath(Base.source_path()))
 name = first(split(name_jl,"."))
 
@@ -34,7 +32,6 @@ name = first(split(name_jl,"."))
 P = 2;
 Q = 3;
 Bands = 3;
-# max bond dim in initialisation is 20 (taking it larger does not improve it)
 bond_dim = 30;
 
 t_OS = zeros(Bands,Bands);

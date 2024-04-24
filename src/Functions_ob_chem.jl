@@ -1,7 +1,7 @@
 module Functions_ob_chem
 
 using MKL 
-#using ThreadPinning
+using ThreadPinning
 using LinearAlgebra
 using MPSKit, MPSKitModels
 using TensorKit
@@ -13,17 +13,10 @@ using QuadGK, SpecialFunctions
 using TensorOperations
 using Revise
 
-
-#include("kitaev.jl")
-
-#=
 function __init__()
-    ThreadPinning.mkl_set_dynamic(0)
-    BLAS.set_num_threads(1)
-    pinthreads(:affinitymask)
-    TensorOperations.disable_cache()
+    LinearAlgebra.BLAS.set_num_threads(1)
+    ThreadPinning.pinthreads(:cores)
 end
-=#
 
 abstract type Simulation end
 name(s::Simulation) = string(typeof(s))
@@ -47,9 +40,9 @@ struct Hubbard_Chem_Simulation <: Simulation
 end
 name(::Hubbard_Chem_Simulation) = "hubbard_ob_chem"
 
-
-function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep}})
-    return "Irrep[fℤ₂×SU₂]($(s.sectors[1].sector.n), $(s.sectors[2].j))"
+function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1Irrep}})
+    parts = map(x -> sprint(show, x; context=:typeinfo => typeof(x)), s.sectors)
+    return "[fℤ₂×SU₂]$(parts)"
 end
 
 
