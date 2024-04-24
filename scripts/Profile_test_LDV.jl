@@ -67,7 +67,7 @@ length(collect(keys(Hi)))
 Hi.imspaces
 dim.(Hi.imspaces)
 
-for i in 1:length(H)
+for i in eachindex(H)
     println("Hamiltonian at site $i")
     Hi = H[i]
 
