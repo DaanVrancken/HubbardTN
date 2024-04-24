@@ -1,3 +1,7 @@
+##################
+# INITIALISATION #
+##################
+
 using LinearAlgebra
 using TensorOperations
 using TensorKit
@@ -7,10 +11,14 @@ using KrylovKit
 using OptimKit
 using Printf
 using Plots
+using Revise
 using DrWatson
 using Plots.PlotMeasures
 
 @quickactivate "Hubbard"
+
+LinearAlgebra.BLAS.set_num_threads(1)
+ThreadPinning.pinthreads(:cores)
 
 include(projectdir("src", "Functions_multiband.jl"))
 import .Functions_multiband as fm
@@ -18,9 +26,13 @@ import .Functions_multiband as fm
 name_jl = last(splitpath(Base.source_path()))
 name = first(split(name_jl,"."))
 
+
+#################
+# DEFINE SYSTEM #
+#################
+
 P = 2;
 Q = 3;
-# we will now incorporate the system as a six-band model
 Bands = 6;
 bond_dim = 25;
 
@@ -45,12 +57,22 @@ J = [J_OS Z; Z J_OS];
 
 model = fm.Hubbard_MB_Simulation(t, u, J, μ, P, Q, 2.5, bond_dim; verbosity=0, code = name);
 
+
+########################
+# COMPUTE GROUNDSTATES #
+########################
+
 dictionary = fm.produce_groundstate(model);
 ψ₀ = dictionary["groundstate"];
 H = dictionary["ham"];
 E0 = expectation_value(ψ₀, H);
 E = sum(real(E0))./length(H);
 println("Groundstate energy: $E")
+
+
+########################
+# COMPUTE EXCTITATIONS #
+########################
 
 #=
 resolution = 6;
