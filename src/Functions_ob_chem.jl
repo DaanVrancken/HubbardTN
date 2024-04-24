@@ -40,7 +40,7 @@ struct Hubbard_Chem_Simulation <: Simulation
 end
 name(::Hubbard_Chem_Simulation) = "hubbard_ob_chem"
 
-function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1Irrep}})
+function Base.string(s::TensorKit.ProductSector{Tuple{SU2Irrep,U1Irrep}})
     parts = map(x -> sprint(show, x; context=:typeinfo => typeof(x)), s.sectors)
     return "[fℤ₂×SU₂]$(parts)"
 end
