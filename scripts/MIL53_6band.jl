@@ -72,30 +72,22 @@ println("Groundstate energy: $E")
 # COMPUTE EXCTITATIONS #
 ########################
 
-#=
-resolution = 6;
+resolution = 5;
 momenta = range(0, π, resolution);
 nums = 1;
 
-exc_pos = fm.produce_excitations_pos(model, momenta, nums);
-Es_pos = exc_pos["Es_pos"];
-println("Excitation energies pos: ")
-println(Es_pos)
-exc_neg = fm.produce_excitations_neg(model, momenta, nums);
-Es_neg = exc_neg["Es_neg"];
-println("Excitation energies neg: ")
-println(Es_neg)
+exc = fm.produce_excitations(model, momenta, nums);
+Es = exc["Es"];
+println("Excitation energies: ")
+println(Es)
 
-plot(momenta./length(H),real(Es_pos[:,1]), label="", linecolor=:blue, title="Energy levels MIL-53(V)",left_margin = [10mm 0mm])
+code = get(model.kwargs, :code, "bands=2");
+plot(momenta,real(Es[:,1]), label="", linecolor=:blue, title="Energy levels MIL-53(V)", left_margin = [10mm 0mm])
 for i in 2:nums
-    plot!(momenta./length(H),real(Es_pos[:,i]), label="", linecolor=:blue)
-end
-for i in 1:nums
-    plot!(momenta./length(H),real(Es_neg[:,i]), label="", linecolor=:red)
+    plot!(momenta,real(Es[:,i]), label="", linecolor=:blue)
 end
 xlabel!("k")
 ylabel!("Energy density")
 
-code = get(model.kwargs, :code, "MIL53");
-savefig(projectdir()*"//plots//"*code*".pdf")
-=#
+name = code*".pdf";
+savefig(joinpath(projectdir("plots","Data_MB"),name))
