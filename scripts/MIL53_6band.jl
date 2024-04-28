@@ -68,7 +68,7 @@ resolution = 5;
 momenta = range(0, π, resolution);
 nums = 1;
 
-exc = fm.produce_excitations(model, momenta, nums);
+exc = hf.produce_excitations(model, momenta, nums);
 Es = exc["Es"];
 println("Excitation energies: ")
 println(Es)
