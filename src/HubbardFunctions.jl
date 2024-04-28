@@ -1348,6 +1348,7 @@ function density_state(ψ)
     end
 
     if Bands==1
+        # convert 1x1 matrix into scalar
         Nₑ = sum(Nₑ)
     end
 
