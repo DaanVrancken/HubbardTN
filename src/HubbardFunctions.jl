@@ -964,14 +964,14 @@ function compute_groundstate(simul::Union{OB_Sim, MB_Sim, MBC_Sim})
     
     kwargs = simul.kwargs
     
-    tol = get(kwargs, :tol, 1e-10)
+    tol = get(kwargs, :tol, 1e-6)
     verbosity = get(kwargs, :verbosity, 0)
     maxiter = get(kwargs, :maxiter, Int(1e3))
     
     schmidtcut = 10.0^(-simul.svalue)
     
     if length(H) > 1
-        ψ₀, envs, = find_groundstate(ψ₀, H, IDMRG2(; trscheme=truncbelow(schmidtcut), tol=max(tol, schmidtcut/10), verbosity=verbosity))
+        ψ₀, envs, = find_groundstate(ψ₀, H, IDMRG2(; trscheme=truncbelow(schmidtcut), tol=tol, verbosity=verbosity))
     else
         error("Hamiltonian has length 1. Unit cell is too small.")
         # https://github.com/lkdvos/Hubbard/blob/e6aa3f39871a8d128019ce101644798db19082dc/src/Hubbard.jl
