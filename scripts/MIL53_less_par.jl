@@ -34,7 +34,7 @@ u = [1.013 0.0 0.0; 0.0 0.948 0.0; 0.0 0.0 1.211];
 μ = zeros(Bands);
 J = zeros(Bands,Bands);
 
-model = hf.Hubbard_MB_Simulation(t, u, J, μ, P, Q, 2.7, bond_dim; code = name);
+model = hf.MB_Sim(t, u, J, μ, P, Q, 2.7, bond_dim; code = name);
 
 
 ########################
