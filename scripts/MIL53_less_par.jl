@@ -24,7 +24,7 @@ name = first(split(name_jl,"."))
 P = 2;
 Q = 3;
 Bands = 3;
-bond_dim = 30;
+bond_dim = 25;
 
 t_OS = zeros(Bands,Bands);
 t_IS1 = [-0.115 0.0 0.0; 0.0 0.149 0.0; 0.0 0.0 0.159];
@@ -53,11 +53,11 @@ println("Groundstate energy: $E")
 # COMPUTE EXCTITATIONS #
 ########################
 
-resolution = 5;
+resolution = 10;
 momenta = range(0, π, resolution);
 nums = 1;
 
-exc = hf.produce_excitations(model, momenta, nums);
+exc = hf.produce_excitations(model, momenta, nums; charges=[0,0.0,2]);
 Es = exc["Es"];
 println("Excitation energies: ")
 println(Es)
