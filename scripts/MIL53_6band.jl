@@ -4,6 +4,7 @@
 
 using MPSKit
 using Printf
+using Plots
 using Revise
 using DrWatson
 
