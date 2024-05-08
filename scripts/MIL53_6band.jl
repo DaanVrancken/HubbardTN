@@ -3,6 +3,7 @@
 ##################
 
 using MPSKit
+using KrylovKit
 using Printf
 using Plots
 using Revise

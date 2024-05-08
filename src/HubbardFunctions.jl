@@ -1360,7 +1360,7 @@ end
 # Plotting #
 ############
 
-function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[10mm 0mm])
+function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[15mm 0mm], bottom_margin = 15mm)
     _, nums = size(Es)
     plot(momenta,real(Es[:,1]), label="", linecolor=:blue, title=title, left_margin=l_margin)
     for i in 2:nums
