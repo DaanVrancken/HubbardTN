@@ -1175,7 +1175,7 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
         charge_string = "f$(Int(charges[1]))su$(charges[2])"
     end
 
-    band = length(simul.μ)
+    band, _ = size(simul.u)
     code = get(simul.kwargs, :code, "bands=$band")
     data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_"*code*"_nums=$nums"*"charges="*charge_string*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
         return compute_excitations(cfg, momenta, nums; charges=charges, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, solver=solver)
