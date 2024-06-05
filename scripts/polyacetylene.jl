@@ -49,6 +49,7 @@ H = dictionary["ham"];
 E0 = expectation_value(ψ₀, H);
 E = sum(real(E0))./length(H);
 println("Groundstate energy: $E")
+println("Bond dimension: $(dim_state(ψ₀))")
 
 
 ########################
