@@ -53,7 +53,7 @@ println("Bond dimension: $(dim_state(ψ₀))")
 
 
 ########################
-# COMPUTE EXCTITATIONS #
+# COMPUTE EXCITATIONS #
 ########################
 
 resolution = 5;

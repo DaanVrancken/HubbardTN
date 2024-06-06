@@ -1226,7 +1226,7 @@ end
 ####################
 
 function dim_state(ψ)
-    dimension = zeros(length(ψ))
+    dimension = Int64.(zeros(length(ψ)))
     for i in 1:length(ψ)
         dimension[i] = dim(space(ψ.AL[i],1))
     end

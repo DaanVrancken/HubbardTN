@@ -63,7 +63,7 @@ println("Groundstate energy: $E")
 
 
 ########################
-# COMPUTE EXCTITATIONS #
+# COMPUTE EXCITATIONS #
 ########################
 
 resolution = 5;
