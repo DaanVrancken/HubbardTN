@@ -14,7 +14,7 @@ tol = 1e-3
     P=1; 
     Q=1;
 
-    model = hf.OBC_Sim([1.0], [1.0], P, Q, 2.0; verbosity_mu=1);
+    model = hf.OBC_Sim([1.0], [1.0], P/Q, 2.0; mu=false, verbosity_mu=1);
 
     E_norm = -1.03541433
 

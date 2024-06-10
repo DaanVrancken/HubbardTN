@@ -29,13 +29,11 @@ u = cat(U,V,dims=2)
 
 J = [0.0 0.0; 0.0 0.0]
 
-μ = [0.0, 0.0]
-
 P = 1;
 Q = 1;
 bond_dim = 20;
 
-model = hf.MB_Sim(t, u, J, μ, P, Q, 2.0, bond_dim; code = name);
+model = hf.MB_Sim(t, u, J, P, Q, 2.0, bond_dim; code = name);
 
 
 ###############

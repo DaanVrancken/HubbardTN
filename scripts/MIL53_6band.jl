@@ -36,8 +36,6 @@ t_OS = [t_OSa t_IS1a; t_IS1a' t_OSb];
 t_IS = [Z Z; t_IS1a' Z];
 t = cat(t_OS, t_IS, dims=2);
 
-μ = zeros(Bands);
-
 U_OS = [1.013 0.303 0.363; 0.303 0.948 0.323; 0.363 0.323 1.211];
 U_IS = [0.476 0.309 0.361; 0.302 0.284 0.284; 0.368 0.292 0.350];
 u_OS = [U_OS U_IS; U_IS' U_OS];
@@ -47,7 +45,7 @@ u = cat(u_OS, u_IS, dims=2);
 J_OS = [0.0 0.337 0.316; 0.337 0.0 0.340; 0.316 0.340 0.0];
 J = [J_OS Z; Z J_OS];
 
-model = hf.MB_Sim(t, u, J, μ, P, Q, 1.7, bond_dim; code = name);
+model = hf.MB_Sim(t, u, J, P, Q, 1.7, bond_dim; code = name);
 
 
 ########################

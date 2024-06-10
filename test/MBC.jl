@@ -19,7 +19,7 @@ name = first(split(name_jl,"."))
 # DEFINE SYSTEM #
 #################
 
-t_OS = [0.0 0.0; 0.0 0.0];
+t_OS = [0.5 0.0; 0.0 0.5];
 t_IS = [1.0 0.0; 0.0 1.0];
 t = cat(t_OS,t_IS, dims=2)
 
@@ -29,11 +29,9 @@ u = cat(U,V,dims=2)
 
 J = [0.0 0.0; 0.0 0.0]
 
-μ = [0.5, 0.5]
-
 bond_dim = 20;
 
-model = hf.MBC_Sim(t, u, J, μ, 2.0, bond_dim; verbosity=0, code=name);
+model = hf.MBC_Sim(t, u, J, 2.0, bond_dim; verbosity=0, code=name);
 
 
 ###############
@@ -47,6 +45,12 @@ dictionary = hf.produce_groundstate(model; force=true);
     H = dictionary["ham"];
 
     E_norm = -1.01631556
+
+    Bands,_ = size(t)
+    μ = zeros(Bands)
+    for i in 1:Bands
+        μ[i] = t[i,i]
+    end
 
     Ne = hf.density_state(ψ₀);
     E0 = expectation_value(ψ₀, H) + μ.*Ne;

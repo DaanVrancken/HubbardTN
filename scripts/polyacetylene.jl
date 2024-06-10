@@ -25,18 +25,17 @@ name = first(split(name_jl,"."))
 
 s = 2.0
 
-t_OS = [0.0  2.588; 2.588 0.0];
+t_OS = [-0.784  2.588; 2.588 -0.784];
 t_IS = [0.0345 2.745; -0.036 0.0345];
 t = cat(t_OS,t_IS, dims=2)
 U = [9.86 5.7656; 5.7656 9.86];
 J = [0.0 0.096; 0.096 0.0]
-μ = [-0.784,-0.784]
 
 P = 1;
 Q = 1;
 bond_dim = 20;
 
-model = hf.MB_Sim(t, U, J, μ, P, Q, s, bond_dim; code = name);
+model = hf.MB_Sim(t, U, J, P, Q, s, bond_dim; code = name);
 
 
 ########################

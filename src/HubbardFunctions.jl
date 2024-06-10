@@ -49,14 +49,13 @@ struct MB_Sim <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + BxB*range matrix for IS
     U::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + BxB*range matrix for IS
     J::Matrix{Float64}                        #convention: BxB matrix for OS (with OB zeros) + BxB*range matrix for IS
-    μ::Array{Float64, 1}                      #convention: Bx1 array
     P::Int64
     Q::Int64
     svalue::Float64
     bond_dim::Int64
     kwargs
-    function MB_Sim(t, U, J, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim = 50; kwargs...)
-        return new(t, U, J, μ, P, Q, svalue, bond_dim, kwargs)
+    function MB_Sim(t, U, J, P=1, Q=1, svalue=2.0, bond_dim = 50; kwargs...)
+        return new(t, U, J, P, Q, svalue, bond_dim, kwargs)
     end
 end
 name(::MB_Sim) = "MB"
@@ -64,18 +63,22 @@ name(::MB_Sim) = "MB"
 struct OBC_Sim <: Simulation
     t::Vector{Float64}
     u::Vector{Float64}
-    μ::Union{Float64, Nothing}
-    P::Union{Int64, Nothing}
-    Q::Union{Int64, Nothing}
+    μ::Union{Float64, Nothing}    # Imposed chemical potential
+    f::Union{Float64, Nothing}    # Fraction indicating the filling
     svalue::Float64
     bond_dim::Int64
     period::Int64
     kwargs
-    function OBC_Sim(t, u, μ::Float64, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
-        return new(t, u, μ, nothing, nothing, svalue, bond_dim, period, kwargs)
-    end
-    function OBC_Sim(t, u, P::Int64, Q::Int64, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
-        return new(t, u, nothing, P, Q, svalue, bond_dim, period, kwargs)
+    function OBC_Sim(t, u, μf::Float64, svalue=2.0, bond_dim = 50, period = 0; mu=true, kwargs...)
+        if mu
+            return new(t, u, μf, nothing, svalue, bond_dim, period, kwargs)
+        else
+            if 0 < μf < 2
+                return new(t, u, nothing, μf, svalue, bond_dim, period, kwargs)
+            else
+                return error("Filling should be between 0 and 2.")
+            end
+        end
     end
 end
 name(::OBC_Sim) = "OBC"
@@ -84,12 +87,11 @@ struct MBC_Sim <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + BxB*range matrix for IS
     U::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + BxB*range matrix for IS
     J::Matrix{Float64}                        #convention: BxB matrix for OS (with OB zeros) + BxB*range matrix for IS
-    μ::Array{Float64, 1}                      #convention: Bx1 array
     svalue::Float64
     bond_dim::Int64
     kwargs
-    function MBC_Sim(t, u, J, μ, svalue=2.0, bond_dim = 50; kwargs...)
-        return new(t, u, J, μ, svalue, bond_dim, kwargs)
+    function MBC_Sim(t, u, J, svalue=2.0, bond_dim = 50; kwargs...)
+        return new(t, u, J, svalue, bond_dim, kwargs)
     end
 end
 name(::MBC_Sim) = "MBC"
@@ -176,14 +178,6 @@ function OS_hopping(t,P,Q)
     if Bands ≠ Bands2 || typeof(t) ≠ Matrix{Float64}
         @warn "t is not a float square matrix."
     end
-    diagonal = zeros(Bands,1)
-    diagonal_zeros = zeros(Bands,1)
-    for i in 1:Bands
-        diagonal[i] = t[i,i]
-    end
-    if diagonal≠diagonal_zeros
-        @warn "On-band hopping is not taken into account in OS_hopping."
-    end
     
     if iseven(P)
         T = Q
@@ -195,6 +189,7 @@ function OS_hopping(t,P,Q)
     Lattice = InfiniteStrip(Bands,T*Bands)
         
     # Define necessary different indices of sites/orbitals in the lattice
+    # Diagonal terms are taken care of in chem_pot
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
                for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
@@ -456,16 +451,14 @@ function hamiltonian(simul::MB_Sim)
     t = simul.t
     u = simul.U
     J = simul.J
-    μ = simul.μ
     P = simul.P
     Q = simul.Q
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
-    Bands2 = length(μ)
-    Bands3, width_J = size(J)
+    Bands2, width_J = size(J)
 
-    if !(Bands == Bands1 == Bands2 == Bands3)
+    if !(Bands == Bands1 == Bands2)
         return error("Number of bands is incosistent.")
     end
 
@@ -494,6 +487,10 @@ function hamiltonian(simul::MB_Sim)
         end
     end
 
+    μ = zeros(Bands)
+    for i in 1:Bands
+        μ[i] = t_OS[i,i]
+    end
     if μ != zeros(Bands)
         H_total += Chem_pot(μ,P,Q)
     end
@@ -596,19 +593,12 @@ function OS_hopping(t)
     if Bands ≠ Bands2 || typeof(t) ≠ Matrix{Float64}
         @warn "t is not a float square matrix."
     end
-    diagonal = zeros(Bands,1)
-    diagonal_zeros = zeros(Bands,1)
-    for i in 1:Bands
-        diagonal[i] = t[i,i]
-    end
-    if diagonal≠diagonal_zeros
-        @warn "On-band hopping is not taken into account in OS_hopping."
-    end
     
     cdc,_ = hopping()
     Lattice = InfiniteStrip(Bands,Bands)
         
     # Define necessary different indices of sites/orbitals in the lattice
+    # Diagonal terms are taken care of in chem_pot
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
                for l in 1:(Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
@@ -814,14 +804,12 @@ function hamiltonian(simul::MBC_Sim)
     t = simul.t
     u = simul.U
     J = simul.J
-    μ = simul.μ
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
-    Bands2 = length(μ)
-    Bands3, width_J = size(J)
+    Bands2, width_J = size(J)
 
-    if !(Bands == Bands1 == Bands2 == Bands3)
+    if !(Bands == Bands1 == Bands2)
         return error("Number of bands is incosistent.")
     end
 
@@ -850,6 +838,10 @@ function hamiltonian(simul::MBC_Sim)
         end
     end
 
+    μ = zeros(Bands)
+    for i in 1:Bands
+        μ[i] = t_OS[i,i]
+    end
     if μ != zeros(Bands)
         H_total += Chem_pot(μ)
     end
@@ -1023,8 +1015,7 @@ function compute_groundstate(simul::OBC_Sim)
         dictionary = compute_groundstate(simul, simul.μ);
         dictionary["μ"] = simul.μ
     else 
-        P = simul.P
-        Q = simul.Q
+        f = simul.f
         tol_mu = get(simul.kwargs, :tol_mu, 1e-8)
         maxiter_mu = get(simul.kwargs, :maxiter_mu, 20)
         step_size = get(simul.kwargs, :step_size, 1.0)
@@ -1039,21 +1030,21 @@ function compute_groundstate(simul::OBC_Sim)
         dictionary_u = deepcopy(dictionary_l)
         dictionary_sp = deepcopy(dictionary_l)
         while i<=maxiter_mu
-            if abs(density_state(dictionary_u["groundstate"]) - P/Q) < tol_mu
+            if abs(density_state(dictionary_u["groundstate"]) - f) < tol_mu
                 flag=true
                 dictionary_sp = deepcopy(dictionary_u)
                 mid_point = upper_bound
                 break
-            elseif abs(density_state(dictionary_l["groundstate"]) - P/Q) < tol_mu
+            elseif abs(density_state(dictionary_l["groundstate"]) - f) < tol_mu
                 flag=true
                 dictionary_sp = deepcopy(dictionary_l)
                 mid_point = lower_bound
                 break
-            elseif density_state(dictionary_u["groundstate"]) < P/Q
+            elseif density_state(dictionary_u["groundstate"]) < f
                 lower_bound = copy(upper_bound)
                 upper_bound += step_size
                 dictionary_u = compute_groundstate(simul, upper_bound)
-            elseif density_state(dictionary_l["groundstate"]) > P/Q
+            elseif density_state(dictionary_l["groundstate"]) > f
                 upper_bound = copy(lower_bound)
                 lower_bound -= step_size
                 dictionary_l = compute_groundstate(simul, lower_bound)
@@ -1075,10 +1066,10 @@ function compute_groundstate(simul::OBC_Sim)
             @warn "The chemical potential is $value than: $max_value. Increase the stepsize."
         end
 
-        while abs(density_state(dictionary["groundstate"]) - P/Q)>tol_mu && i<=maxiter_mu && !flag
+        while abs(density_state(dictionary["groundstate"]) - f)>tol_mu && i<=maxiter_mu && !flag
             mid_point = (lower_bound + upper_bound)/2
             dictionary = compute_groundstate(simul, mid_point)
-            if density_state(dictionary["groundstate"]) < P/Q
+            if density_state(dictionary["groundstate"]) < f
                 lower_bound = copy(mid_point)
             else
                 upper_bound = copy(mid_point)
@@ -1103,7 +1094,7 @@ function compute_groundstate(simul::OBC_Sim)
 end
 
 function produce_groundstate(simul::Union{MB_Sim, MBC_Sim}; force=false)
-    band = length(simul.μ)
+    band,_ = size(simul.t)
     code = get(simul.kwargs, :code, "bands=$band")
     data, _ = produce_or_load(compute_groundstate, simul, datadir("sims", name(simul)); prefix="groundstate_"*code, force=force)
     return data
@@ -1131,13 +1122,9 @@ function compute_excitations(simul::Simulation, momenta, nums::Int64;
         return error("Trunc_dim should be a positive integer.")
     end
 
-    if hasproperty(simul, :Q) && hasproperty(simul, :μ)
-        if simul.μ !== nothing && simul.Q !== nothing
-            Q = simul.Q
-            sector = fℤ₂(charges[1]) ⊠ SU2Irrep(charges[2]) ⊠ U1Irrep(charges[3]*Q)
-        else
-            sector = fℤ₂(charges[1]) ⊠ SU2Irrep(charges[2])
-        end
+    if hasproperty(simul, :Q)
+        Q = simul.Q
+        sector = fℤ₂(charges[1]) ⊠ SU2Irrep(charges[2]) ⊠ U1Irrep(charges[3]*Q)
     else
         sector = fℤ₂(charges[1]) ⊠ SU2Irrep(charges[2])
     end
@@ -1165,17 +1152,15 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
     else
         momenta_string = "_mom=$(first(momenta))to$(last(momenta))div$(length(momenta))"
     end
-    if hasproperty(simul, :Q) && hasproperty(simul, :μ)
-        if simul.μ !== nothing && simul.Q !== nothing
-            charge_string = "f$(Int(charges[1]))su$(charges[2])u$(Int(charges[3]))"
-            band = length(simul.μ)
-        else
-            charge_string = "f$(Int(charges[1]))su$(charges[2])"
-            band = 1
-        end
+    if hasproperty(simul, :Q)
+        charge_string = "f$(Int(charges[1]))su$(charges[2])u$(Int(charges[3]))"
     else
         charge_string = "f$(Int(charges[1]))su$(charges[2])"
-        band = length(simul.μ)
+    end
+    if typeof(simul.t)==Vector{Float64}
+        band = 1
+    else
+        band,_ = size(simul.t)
     end
 
     code = get(simul.kwargs, :code, "bands=$band")
@@ -1212,7 +1197,7 @@ end
 
 function produce_TruncState(simul::Simulation, trunc_dim::Int64; 
                                     trunc_scheme::Int64=0, force=false)
-    band = length(simul.μ)
+    band,_ = size(simul.t)
     code = get(simul.kwargs, :code, "bands=$band")
     data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="Trunc_GS_"*code*"_dim=$trunc_dim"*"_scheme=$trunc_scheme", force=force) do cfg
         return TruncState(cfg, trunc_dim; trunc_scheme=trunc_scheme)
