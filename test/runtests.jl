@@ -31,6 +31,9 @@ ti = time()
     if GROUP == "ALL" || GROUP == "MBC"
         @time include("MBC.jl")
     end
+    if GROUP == "ALL" || GROUP == "Spin"
+        @time include("Spin.jl")
+    end
 end
 
 ti = time() - ti
