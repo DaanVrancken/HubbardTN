@@ -31,8 +31,9 @@ ti = time()
     if GROUP == "ALL" || GROUP == "MBC"
         @time include("MBC.jl")
     end
-    if GROUP == "ALL" || GROUP == "Spin"
+    if GROUP == "ALL" || GROUP == "SPIN"
         @time include("Spin.jl")
+        println("hello")
     end
 end
 
@@ -45,5 +46,4 @@ Not included in tests:
 - Off-site and exchange interactions.
 - Plotting of excitations.
 - Truncation of states.
-- Spin dependent code
 ")
