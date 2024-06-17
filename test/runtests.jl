@@ -42,4 +42,5 @@ Not included in tests:
 - Off-site and exchange interactions.
 - Plotting of excitations.
 - Truncation of states.
+- Spin dependent code
 ")

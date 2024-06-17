@@ -43,7 +43,7 @@ E = zeros(length(P),1);
 E_norm = [-0.73920032, -0.48460447, 1.76073968]
 
 @testset "Dependence on filling" for i in eachindex(P)
-    model = hf.OB_Sim(t, u, 0.0, P[i], Q[i], 2.0; verbosity=0);
+    model = hf.OB_Sim(t, u, 0.0, P[i], Q[i], 2.0);
     dictionary = hf.produce_groundstate(model; force=true);
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
@@ -78,7 +78,7 @@ dictionary = hf.produce_groundstate(model);
     resolution = 5;
     momenta = range(0, π, resolution);
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true);
+    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test real(Es)≈Es_norm atol=tol
     @test imag(Es)≈zeros(size(Es)) atol=1e-8

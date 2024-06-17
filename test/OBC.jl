@@ -54,7 +54,7 @@ dictionary = hf.produce_groundstate(model; force=true);
     resolution = 5;
     momenta = range(0, π, resolution);
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true);
+    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test real(Es)≈Es_norm atol=tol
     @test imag(Es)≈zeros(size(Es)) atol=1e-8

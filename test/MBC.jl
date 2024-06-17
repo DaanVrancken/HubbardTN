@@ -31,7 +31,7 @@ J = [0.0 0.0; 0.0 0.0]
 
 bond_dim = 20;
 
-model = hf.MBC_Sim(t, u, J, 2.0, bond_dim; verbosity=0, code=name);
+model = hf.MBC_Sim(t, u, J, 2.0, bond_dim; code=name);
 
 
 ###############
@@ -68,7 +68,7 @@ end
     momenta = range(0, π, resolution);
     nums = 1;
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true);
+    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end

@@ -70,7 +70,7 @@ nums = 1;
 
 momentum = 0.0
 
-exc = hf.produce_excitations(model, momentum, nums);
+exc = hf.produce_excitations(model, momentum, nums; charges=[1,0.5,1]);
 Es = exc["Es"];
 println("Excitation energies: ")
 println(Es)
