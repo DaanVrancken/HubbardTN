@@ -33,7 +33,6 @@ ti = time()
     end
     if GROUP == "ALL" || GROUP == "SPIN"
         @time include("Spin.jl")
-        println("hello")
     end
 end
 
@@ -43,7 +42,6 @@ println(round(ti/60, digits = 3), " minutes")
 
 println("
 Not included in tests:
-- Off-site and exchange interactions.
 - Plotting of excitations.
 - Truncation of states.
 ")
