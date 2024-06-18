@@ -1057,5 +1057,11 @@ function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[15
     ylabel!("Energy density")
 end
 
+function plot_spin(model; title="Spin Density", l_margin=[15mm 0mm])
+    up, down = hf.density_spin(model)
+    Sz = up - down
+    heatmap(Sz, color=:grays, c=:grays, label="", xlabel="Site", ylabel="Band", title=title, clims=(-1, 1))
+end
+
         
 end
