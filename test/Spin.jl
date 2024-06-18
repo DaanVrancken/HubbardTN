@@ -33,9 +33,9 @@ model2 = hf.MB_Sim(t, u, J, P, Q, 2.0, bond_dim; code = name, spin=true);
 # GROUNDSTATE #
 ###############
 
-dictionary1 = hf.produce_groundstate(model1;force=false);
+dictionary1 = hf.produce_groundstate(model1;force=true);
 
-dictionary2 = hf.produce_groundstate(model2;force=false);
+dictionary2 = hf.produce_groundstate(model2;force=true);
 
 @testset "Groundstate" begin
     E_norm1 = -0.32637
@@ -62,7 +62,7 @@ end
     resolution = 5;
     momenta = range(0, π, resolution);
 
-    exc = hf.produce_excitations(model1, momenta, nums; charges=[0,0.0,0], force=false);
+    exc = hf.produce_excitations(model1, momenta, nums; charges=[0,0.0,0], force=true);
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end

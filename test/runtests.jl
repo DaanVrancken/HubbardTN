@@ -42,6 +42,5 @@ println(round(ti/60, digits = 3), " minutes")
 
 println("
 Not included in tests:
-- Plotting of excitations.
-- Truncation of states.
+- Plotting tools.
 ")

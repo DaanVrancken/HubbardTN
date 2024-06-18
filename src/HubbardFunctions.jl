@@ -83,7 +83,7 @@ struct OBC_Sim <: Simulation
 end
 name(::OBC_Sim) = "OBC"
 
-# used to compute groundstates in µ loop
+# used to compute groundstates in µ iterations
 struct OBC_Sim2 <: Simulation
     t::Vector{Float64}
     u::Vector{Float64}

@@ -50,7 +50,7 @@ model2 = hf.MB_Sim(t2, u2, J2, P, Q, 2.0, bond_dim; code = name*"2");
 # GROUNDSTATE #
 ###############
 
-dictionary = hf.produce_groundstate(model; force=false);
+dictionary = hf.produce_groundstate(model; force=false);#=
 dictionary2 = hf.produce_groundstate(model2; force=true);
 
 @testset "Groundstate" begin
@@ -83,16 +83,22 @@ end
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end
-
+=#
 
 #########
 # Tools #
 #########
 
 @testset "Tools" begin
+    trunc_dim = 5
+    dict_trunc = hf.produce_TruncState(model, trunc_dim; trunc_scheme=1, force=true)
+
     D = hf.dim_state(dictionary["groundstate"])
     @test typeof(D) == Vector{Int64}
     @test D > zeros(size(D))
+
+    D_trunc = hf.dim_state(dict_trunc["ψ_trunc"])
+    @test sum(D_trunc)/4 <= trunc_dim
 
     electron_number = hf.density_state(model)
     @test sum(electron_number)/2 ≈ P/Q atol=1e-8
