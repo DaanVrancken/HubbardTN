@@ -42,15 +42,16 @@ U2 = [3.0 0.0; 0.0 3.0]
 V2 = [0.25 0.0; 0.0 0.25]
 u2 = cat(U2,V2,dims=2)
 J2 = [0.0 0.5; 0.5 0.0]
+U13 = zeros(2,2) #[0.0 0.5; 0.5 0.0]
 
-model2 = hf.MB_Sim(t2, u2, J2, P, Q, 2.0, bond_dim; code = name*"2");
+model2 = hf.MB_Sim(t2, u2, J2, U13, P, Q, 2.0, bond_dim; code = name*"2");
 
 
 ###############
 # GROUNDSTATE #
 ###############
 
-dictionary = hf.produce_groundstate(model; force=false);#=
+dictionary = hf.produce_groundstate(model; force=true);
 dictionary2 = hf.produce_groundstate(model2; force=true);
 
 @testset "Groundstate" begin
@@ -65,7 +66,7 @@ dictionary2 = hf.produce_groundstate(model2; force=true);
     ψ2 = dictionary2["groundstate"];
     H2 = dictionary["ham"];
     E02 = expectation_value(ψ2, H2);
-    E2 = sum(real(E02))/length(H2)
+    E2 = sum(E02)/length(H2)
     @test imag(E2)≈0.0 atol=1e-8
 end
 
@@ -83,7 +84,7 @@ end
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end
-=#
+
 
 #########
 # Tools #

@@ -43,4 +43,5 @@ println(round(ti/60, digits = 3), " minutes")
 println("
 Not included in tests:
 - Plotting tools.
+- Uiiij interaction.
 ")
