@@ -47,15 +47,20 @@ name(::OB_Sim) = "OB"
 
 struct MB_Sim <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + Bx(B*range) matrix for IS
-    U::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + Bx(B*range) matrix for IS
+    u::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + Bx(B*range) matrix for IS
     J::Matrix{Float64}                        #convention: BxB matrix for OS (with OB zeros) + Bx(B*range) matrix for IS
+    U13::Matrix{Float64}                      #Matrix with iiij, iiji... parameters. Same convention.
     P::Int64
     Q::Int64
     svalue::Float64
     bond_dim::Int64
     kwargs
-    function MB_Sim(t, U, J, P=1, Q=1, svalue=2.0, bond_dim = 50; kwargs...)
-        return new(t, U, J, P, Q, svalue, bond_dim, kwargs)
+    function MB_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, P=1, Q=1, svalue=2.0, bond_dim = 50; kwargs...)
+        Bands,_ = size(t)
+        return new(t, u, J, zeros(Bands,Bands), P, Q, svalue, bond_dim, kwargs)
+    end
+    function MB_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, U13::Matrix{Float64}, P=1, Q=1, svalue=2.0, bond_dim = 50; kwargs...)
+        return new(t, u, J, U13, P, Q, svalue, bond_dim, kwargs)
     end
 end
 name(::MB_Sim) = "MB"
@@ -100,13 +105,18 @@ name(::OBC_Sim2) = "OBC2"
 
 struct MBC_Sim <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + Bx(B*range) matrix for IS
-    U::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + Bx(B*range) matrix for IS
+    u::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + Bx(B*range) matrix for IS
     J::Matrix{Float64}                        #convention: BxB matrix for OS (with OB zeros) + Bx(B*range) matrix for IS
+    U13::Matrix{Float64}                      #Matrix with iiij, iiji... parameters. Same convention.
     svalue::Float64
     bond_dim::Int64
     kwargs
-    function MBC_Sim(t, u, J, svalue=2.0, bond_dim = 50; kwargs...)
-        return new(t, u, J, svalue, bond_dim, kwargs)
+    function MBC_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, svalue=2.0, bond_dim = 50; kwargs...)
+        Bands,_ = size(t)
+        return new(t, u, J, zeros(Bands,Bands), svalue, bond_dim, kwargs)
+    end
+    function MB_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, U13::Matrix{Float64}, svalue=2.0, bond_dim = 50; kwargs...)
+        return new(t, u, J, U13, svalue, bond_dim, kwargs)
     end
 end
 name(::MBC_Sim) = "MBC"
@@ -305,7 +315,14 @@ function OS_Hopping(t,T,cdc)
     Bands,Bands2 = size(t)
     
     if Bands ≠ Bands2 || typeof(t) ≠ Matrix{Float64}
-        @warn "t is not a float square matrix."
+        @warn "t_OS is not a float square matrix."
+    end
+    for i in 1:Bands
+        for j in (i+1):Bands
+            if t[i,j] ≠ t'[i,j]
+                @warn "t_OS is not Hermitian"
+            end
+        end
     end
     
     Lattice = InfiniteStrip(Bands,T*Bands)
@@ -323,7 +340,7 @@ end
 function IS_Hopping(t,range,T,cdc)
     Bands,Bands2 = size(t)
     if Bands ≠ Bands2 || typeof(t) ≠ Matrix{Float64}
-        @warn "t is not a float square matrix"
+        @warn "t_IS is not a float square matrix"
     end
     
     twosite = cdc + cdc'
@@ -362,7 +379,7 @@ function Direct_OS(U,T,n)
     Bands,Bands2 = size(U)
     
     if Bands ≠ Bands2 || typeof(U) ≠ Matrix{Float64}
-        @warn "U is not a float square matrix"
+        @warn "U_OS is not a float square matrix"
     end
     
     U_av = zeros(Bands,Bands2)
@@ -386,7 +403,7 @@ function Exchange1_OS(J,T,cdc)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
-        @warn "J is not a float square matrix"
+        @warn "J_OS is not a float square matrix"
     end
     diagonal = zeros(Bands,1)
     diagonal_zeros = zeros(Bands,1)
@@ -410,7 +427,7 @@ function Exchange2_OS(J,T,cdc)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
-        @warn "J is not a float square matrix"
+        @warn "J_OS is not a float square matrix"
     end
     diagonal = zeros(Bands,1)
     diagonal_zeros = zeros(Bands,1)
@@ -428,6 +445,42 @@ function Exchange2_OS(J,T,cdc)
                for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
     return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
+end;
+
+function Exchange_OS(J,T,cdc)
+    return Exchange1_OS(J,T,cdc) + Exchange2_OS(J,T,cdc)
+end;
+
+function Uijjj_OS(U,T,cdc)
+    Bands,Bands2 = size(U)
+    
+    if Bands ≠ Bands2 || typeof(U) ≠ Matrix{Float64}
+        @warn "U13_OS is not a float square matrix"
+    end
+    diagonal = zeros(Bands,1)
+    diagonal_zeros = zeros(Bands,1)
+    for i in 1:Bands
+        diagonal[i] = U[i,i]
+    end
+    if diagonal≠diagonal_zeros
+        @warn "On-band interaction is not taken into account in Exchange_OS."
+    end
+    
+    @tensor C1[-1 -2; -3 -4] := cdc[-1 2; -3 -4] * cdc[-2 3; 3 2]
+    @tensor C2[-1 -2; -3 -4] := cdc[-2 -1; 3 -3] * cdc[3 2; 2 -4]
+    @tensor C3[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
+    @tensor C4[-1 -2; -3 -4] := cdc[1 -1; 3 -3] * cdc[-2 3; 1 -4]
+    Lattice = InfiniteStrip(Bands,T*Bands)
+    
+    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
+               for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
+    
+    H = @mpoham sum(0.5*U[bi,bf]*C1{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
+    for C in [C2, C3, C4]
+        H += @mpoham sum(0.5*U[bi,bf]*C{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
+    end
+
+    return H
 end;
 
 # V[i,j] gives the direct interaction between band i on one site to band j on the range^th next site.
@@ -451,7 +504,7 @@ function Exchange1_IS(J,range,T,cdc)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
-        @warn "J is not a float square matrix"
+        @warn "J_IS is not a float square matrix"
     end
     
     @tensor C4[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[-2 3; 2 -3]
@@ -466,7 +519,7 @@ function Exchange2_IS(J,range,T,cdc)
     Bands,Bands2 = size(J)
     
     if Bands ≠ Bands2 || typeof(J) ≠ Matrix{Float64}
-        @warn "J is not a float square matrix"
+        @warn "J_IS is not a float square matrix"
     end
     
     @tensor C4[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[3 -2; -3 2]
@@ -474,19 +527,48 @@ function Exchange2_IS(J,range,T,cdc)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
     
-    return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J[bi,bf]*C4{Lattice[bi,site+range],Lattice[bf,site]} for (site,bi,bf) in Indices) #operator has direction
+    return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J[bi,bf]*C4{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
+end;
+
+function Exchange_IS(J,range,T,cdc)
+    return Exchange1_IS(J,range,T,cdc) + Exchange2_IS(J,range,T,cdc)
+end;
+
+function Uijjj_IS(U,range,T,cdc)
+    Bands,Bands2 = size(U)
+    
+    if Bands ≠ Bands2 || typeof(U) ≠ Matrix{Float64}
+        @warn "U13_IS is not a float square matrix"
+    end
+    
+    @tensor C1[-1 -2; -3 -4] := cdc[-1 2; -3 -4] * cdc[-2 3; 3 2]
+    @tensor C2[-1 -2; -3 -4] := cdc[-2 -1; 3 -3] * cdc[3 2; 2 -4]
+    @tensor C3[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
+    @tensor C4[-1 -2; -3 -4] := cdc[1 -1; 3 -3] * cdc[-2 3; 1 -4]
+    Lattice = InfiniteStrip(Bands,T*Bands)
+    
+    Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
+    
+    H = @mpoham sum(0.5*U[bi,bf]*C1{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bi,bf]*C1{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
+    for C in [C2, C3, C4]
+        H += @mpoham sum(0.5*U[bi,bf]*C{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bi,bf]*C{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices)
+    end
+
+    return H
 end;
 
 function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     t = simul.t
-    u = simul.U
+    u = simul.u
     J = simul.J
+    U13 = simul.U13
     spin = get(simul.kwargs, :spin, false)
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
     Bands2, width_J = size(J)
-    if !(Bands == Bands1 == Bands2)
+    Bands3, width_U13 = size(U13)
+    if !(Bands == Bands1 == Bands2 == Bands3)
         return error("Number of bands is incosistent.")
     end
 
@@ -511,7 +593,9 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     Range_t = Int((width_t-Bands)/Bands)
     Range_u = Int((width_u-Bands)/Bands)
     Range_J = Int((width_J-Bands)/Bands)
+    Range_U13 = Int((width_U13-Bands)/Bands)
 
+    # Define matrices
     u_OB = zeros(Bands)
     for i in 1:Bands
         u_OB[i] = u[i,i]
@@ -519,52 +603,39 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     if u_OB == zeros(Bands)
         @warn "No on-band interaction found. This may lead to too low contributions of other Hamiltonian terms."
     end
-    H_total = OB_interaction(u_OB,T,OSI)
-
     t_OS = t[:,1:Bands]
-    if t_OS != zeros(Bands,Bands)
-        H_total += OS_Hopping(t_OS,T,cdc)
-    end
-
-    for i in 1:Range_t
-        t_IS = t[:,(Bands*i+1):(Bands*(i+1))]
-        if t_IS != zeros(Bands,Bands)
-            H_total += IS_Hopping(t_IS,i,T,cdc)
-        end
-    end
-
     μ = zeros(Bands)
     for i in 1:Bands
         μ[i] = t_OS[i,i]
     end
-    if μ != zeros(Bands)
-        H_total += Chem_pot(μ,T,n)
-    end
-
     u_OS = u[:,1:Bands]
     for i in 1:Bands
         u_OS[i,i] = 0.0
     end
-    if u_OS != zeros(Bands,Bands)
-        H_total += Direct_OS(u_OS,T,n)
+    J_OS = J[:,1:Bands]
+    U13_OS = U13[:,1:Bands]
+
+    # Implement Hamiltonian OB
+    H_total = OB_interaction(u_OB,T,OSI)
+
+    if μ != zeros(Bands)
+        H_total += Chem_pot(μ,T,n)
     end
 
-    for i in 1:Range_u
-        V = u[:,(Bands*i+1):(Bands*(i+1))]
-        if V != zeros(Bands,Bands)
-            H_total += Direct_IS(V,i,T,n)
+    # Implement Hamiltonian OS
+    for (m,o,f) in [(t_OS,cdc,OS_Hopping),(u_OS,n,Direct_OS),(J_OS,cdc,Exchange_OS),(U13_OS,cdc,Uijjj_OS)]
+        if m != zeros(Bands,Bands)
+            H_total += f(m,T,o)
         end
     end
 
-    J_OS = J[:,1:Bands]
-    if J_OS != zeros(Bands,Bands)
-        H_total += Exchange1_OS(J_OS,T,cdc) + Exchange2_OS(J_OS,T,cdc)
-    end
-
-    for i in 1:Range_J
-        J_IS = J[:,(Bands*i+1):(Bands*(i+1))]
-        if J_IS != zeros(Bands,Bands)
-            H_total += Exchange1_IS(J_IS,i,T,cdc) + Exchange2_IS(J_IS,i,T,cdc) + H_exch_IS
+    # Implement Hamiltonian IS
+    for (m,range,o,f) in [(t,Range_t,cdc,IS_Hopping),(u,Range_u,n,Direct_IS),(J,Range_J,cdc,Exchange_IS),(U13,Range_U13,cdc,Uijjj_IS)]
+        for i in 1:range
+            M = m[:,(Bands*i+1):(Bands*(i+1))]
+            if M != zeros(Bands,Bands)
+                H_total += f(M,i,T,o)
+            end
         end
     end
 
