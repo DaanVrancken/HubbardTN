@@ -1033,8 +1033,8 @@ function density_spin(ψ₀, P, Q)
     Ndown = zeros(Bands,T);
     for i in 1:Bands
         for j in 1:T
-            Nup[i,j] = real(expectation_value(ψ₀, nup)[i+(j-1)*Bands])
-            Ndown[i,j] = real(expectation_value(ψ₀, ndown)[i+(j-1)*Bands])
+            Nup[i,j] = real(expectation_value(ψ₀, (i+(j-1)*Bands) => nup))
+            Ndown[i,j] = real(expectation_value(ψ₀, (i+(j-1)*Bands) => ndown))
         end
     end
 
@@ -1074,7 +1074,7 @@ function density_state(ψ₀,P::Int64,Q::Int64,spin)
     Nₑ = zeros(Bands*T,1);
 
     for i in 1:(Bands*T)
-        Nₑ[i] = real(expectation_value(ψ₀, nₑ)[i])
+        Nₑ[i] = real(expectation_value(ψ₀, i => nₑ))
     end
     
     N_av = zeros(Bands,1)
@@ -1097,17 +1097,11 @@ function density_state(ψ::InfiniteMPS)
     Bands = length(ψ)
 
     n = Number()
-
     nₑ = @mpoham sum(n{i} for i in vertices(InfiniteStrip(Bands,Bands)))
-    Nₑ = real(expectation_value(ψ, nₑ));
 
+    Nₑ = zeros(Bands);
     for i in 1:Bands
-        Nₑ[i] = real(expectation_value(ψ, nₑ)[i])
-    end
-
-    if Bands==1
-        # convert 1x1 matrix into scalar
-        Nₑ = sum(Nₑ)
+        Nₑ[i] = real(expectation_value(ψ, i => nₑ))
     end
 
     return Nₑ
