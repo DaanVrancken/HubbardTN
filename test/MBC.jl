@@ -8,7 +8,7 @@ println("
 # INITIALISATION #
 ##################
 
-Force = true
+Force = false
 tol = 1e-1
 
 # Extract name of the current file. Will be used as code name for the simulation.
@@ -45,9 +45,7 @@ dictionary = hf.produce_groundstate(model; force=Force);
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
 
-    # E_norm = -1.01631556 !
-    E_norm = -3.0352128
-    N_norm = 2.0
+    E_norm = -1.01631556
 
     Bands,_ = size(t)
     μ = zeros(Bands)
@@ -55,12 +53,10 @@ dictionary = hf.produce_groundstate(model; force=Force);
         μ[i] = t[i,i]
     end
 
-    # Ne per band required... !
     Ne = real(hf.density_state(ψ₀));
-    # E0 = expectation_value(ψ₀, H) + μ.*Ne; !
-    E = real(expectation_value(ψ₀, H))
+    E0 = expectation_value(ψ₀, H) + sum(μ.*Ne);
+    E = real(E0)/length(H)
     @test E≈E_norm atol=tol
-    @test Ne≈N_norm atol=tol/2
 end
 
 

@@ -8,7 +8,7 @@ println("
 # INITIALISATION #
 ##################
 
-Force = true
+Force = false
 tol = 1e-1
 
 # Extract name of the current file. Will be used as code name for the simulation.
