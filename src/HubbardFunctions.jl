@@ -1029,12 +1029,14 @@ function density_spin(ψ₀, P, Q)
     blocks(ndown)[I((0, 0, 2*Q-P))] .= 1
     blocks(ndown)[I((1, -1, Q-P))] .= 1
 
-    nup = @mpoham sum(nup{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
-    ndown = @mpoham sum(ndown{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
-
-    # Add functionality to find number per band (for plotting)
-    Nup = real(expectation_value(ψ₀, nup))/T;
-    Ndown = real(expectation_value(ψ₀, ndown))/T;
+    Nup = zeros(Bands,T);
+    Ndown = zeros(Bands,T);
+    for i in 1:Bands
+        for j in 1:T
+            Nup[i,j] = real(expectation_value(ψ₀, (i+(j-1)*Bands) => nup))
+            Ndown[i,j] = real(expectation_value(ψ₀, (i+(j-1)*Bands) => ndown))
+        end
+    end
 
     return Nup, Ndown
 end
@@ -1068,14 +1070,25 @@ function density_state(ψ₀,P::Int64,Q::Int64,spin)
     Bands = Int(length(ψ₀)/T)
 
     n = Number(P,Q,spin)
-    nₑ = @mpoham sum(n{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
 
-    Nₑ = real(expectation_value(ψ₀, nₑ))/T;
+    Nₑ = zeros(Bands*T,1);
+    for i in 1:(Bands*T)
+        Nₑ[i] = real(expectation_value(ψ₀, i => n))
+    end
+    
+    N_av = zeros(Bands,1)
+    for i in 1:Bands
+        av = 0
+        for j in 0:(T-1)
+            av = Nₑ[i+Bands*j] + av
+        end
+        N_av[i,1] = av/T
+    end
 
-    check = (sum(Nₑ)/(Bands) ≈ P/Q)
+    check = (sum(Nₑ)/(T*Bands) ≈ P/Q)
     println("Filling is conserved: $check")
 
-    return Nₑ
+    return N_av
 end
 
 # For Hubbard models involving a chemical potential
@@ -1083,9 +1096,16 @@ function density_state(ψ::InfiniteMPS)
     Bands = length(ψ)
 
     n = Number()
-    nₑ = @mpoham sum(n{i} for i in vertices(InfiniteStrip(Bands,Bands)))
 
-    Nₑ = real(expectation_value(ψ, nₑ));
+    Nₑ = zeros(Bands);
+    for i in 1:Bands
+        Nₑ[i] = real(expectation_value(ψ, i => n))
+    end
+
+    if Bands==1
+        # convert 1x1 matrix into scalar
+        Nₑ = sum(Nₑ)
+    end
 
     return Nₑ
 end
@@ -1106,7 +1126,6 @@ function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[15
 end
 
 function plot_spin(model; title="Spin Density", l_margin=[15mm 0mm])
-    @warn "Plotting spin per site in unit cell is not yet implemented."
     up, down = hf.density_spin(model)
     Sz = up - down
     heatmap(Sz, color=:grays, c=:grays, label="", xlabel="Site", ylabel="Band", title=title, clims=(-1, 1))
