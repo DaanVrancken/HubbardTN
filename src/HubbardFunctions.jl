@@ -1029,6 +1029,9 @@ function density_spin(ψ₀, P, Q)
     blocks(ndown)[I((0, 0, 2*Q-P))] .= 1
     blocks(ndown)[I((1, -1, Q-P))] .= 1
 
+    nup = @mpoham sum(nup{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
+    ndown = @mpoham sum(ndown{i} for i in vertices(InfiniteStrip(Bands,T*Bands)))
+
     # Add functionality to find number per band (for plotting)
     Nup = real(expectation_value(ψ₀, nup))/T;
     Ndown = real(expectation_value(ψ₀, ndown))/T;

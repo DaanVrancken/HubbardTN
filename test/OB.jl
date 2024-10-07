@@ -4,6 +4,7 @@ println("
 ##############
 ")
 
+Force = true
 tol = 1e-3
 
 ############################
@@ -21,7 +22,7 @@ E_norm = [-1.2696767, -1.037173, -0.84163698]
 
 @testset "Dependence on parameters" for u in u_range
     model = hf.OB_Sim([1.0], [u], 0.0, P, Q, 2.0);
-    dictionary = hf.produce_groundstate(model; force=true);
+    dictionary = hf.produce_groundstate(model; force=Force);
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
     E0 = expectation_value(ψ₀, H);
@@ -44,7 +45,7 @@ E_norm = [-0.73920032, -0.48460447, 1.76073968]
 
 @testset "Dependence on filling" for i in eachindex(P)
     model = hf.OB_Sim(t, u, 0.0, P[i], Q[i], 2.0);
-    dictionary = hf.produce_groundstate(model; force=true);
+    dictionary = hf.produce_groundstate(model; force=Force);
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
     E0 = expectation_value(ψ₀, H);
@@ -78,7 +79,7 @@ dictionary = hf.produce_groundstate(model);
     resolution = 5;
     momenta = range(0, π, resolution);
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
+    exc = hf.produce_excitations(model, momenta, nums; force=Force, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test real(Es)≈Es_norm atol=tol
     @test imag(Es)≈zeros(size(Es)) atol=1e-8

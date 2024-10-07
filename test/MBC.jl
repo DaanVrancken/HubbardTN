@@ -8,6 +8,7 @@ println("
 # INITIALISATION #
 ##################
 
+Force = true
 tol = 1e-1
 
 # Extract name of the current file. Will be used as code name for the simulation.
@@ -38,13 +39,15 @@ model = hf.MBC_Sim(t, u, J, 2.0, bond_dim; code=name);
 # GROUNDSTATE #
 ###############
 
-dictionary = hf.produce_groundstate(model; force=true);
+dictionary = hf.produce_groundstate(model; force=Force);
 
 @testset "Groundstate" begin
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
 
-    E_norm = -1.01631556
+    # E_norm = -1.01631556 !
+    E_norm = -3.0352128
+    N_norm = 2.0
 
     Bands,_ = size(t)
     μ = zeros(Bands)
@@ -52,10 +55,12 @@ dictionary = hf.produce_groundstate(model; force=true);
         μ[i] = t[i,i]
     end
 
-    Ne = hf.density_state(ψ₀);
-    E0 = expectation_value(ψ₀, H) + μ.*Ne;
-    E = sum(real(E0))/length(H)
+    # Ne per band required... !
+    Ne = real(hf.density_state(ψ₀));
+    # E0 = expectation_value(ψ₀, H) + μ.*Ne; !
+    E = real(expectation_value(ψ₀, H))
     @test E≈E_norm atol=tol
+    @test Ne≈N_norm atol=tol/2
 end
 
 
@@ -68,7 +73,7 @@ end
     momenta = range(0, π, resolution);
     nums = 1;
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
+    exc = hf.produce_excitations(model, momenta, nums; force=Force, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end

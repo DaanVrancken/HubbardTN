@@ -8,6 +8,7 @@ println("
 # INITIALISATION #
 ##################
 
+Force = true
 tol = 1e-1
 
 model1 = hf.OB_Sim([1.0],[8.0], 0.0,1,1,2.0;spin=true)
@@ -33,9 +34,9 @@ model2 = hf.MB_Sim(t, u, J, P, Q, 2.0, bond_dim; code = name, spin=true);
 # GROUNDSTATE #
 ###############
 
-dictionary1 = hf.produce_groundstate(model1;force=true);
+dictionary1 = hf.produce_groundstate(model1;force=Force);
 
-dictionary2 = hf.produce_groundstate(model2;force=true);
+dictionary2 = hf.produce_groundstate(model2;force=Force);
 
 @testset "Groundstate" begin
     E_norm1 = -0.32637
@@ -62,7 +63,7 @@ end
     resolution = 5;
     momenta = range(0, π, resolution);
 
-    exc = hf.produce_excitations(model1, momenta, nums; charges=[0,0.0,0], force=true);
+    exc = hf.produce_excitations(model1, momenta, nums; charges=[0,0.0,0], force=Force);
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end
@@ -76,10 +77,10 @@ end
     N1 = hf.density_state(model1)
     Nup1, Ndown1 = hf.density_spin(model1)
 
-    @test sum(N1) ≈ sum(Nup1 + Ndown1)/length(dictionary1["ham"])
+    @test sum(N1) ≈ sum(Nup1 + Ndown1)
 
     N2 = hf.density_state(model2)
     Nup2, Ndown2 = hf.density_spin(model2)
 
-    @test sum(N2)/2 ≈ sum(Nup2 + Ndown2)/length(dictionary2["ham"])
+    @test sum(N2) ≈ sum(Nup2 + Ndown2)
 end

@@ -4,6 +4,7 @@ println("
 ###################
 ")
 
+Force = true
 tol = 1e-3
 
 ###############
@@ -18,7 +19,7 @@ tol = 1e-3
 
     E_norm = -1.03541433
 
-    dictionary = hf.produce_groundstate(model; force=true);
+    dictionary = hf.produce_groundstate(model; force=Force);
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
 
@@ -40,7 +41,7 @@ t=[2.726];
 
 model = hf.OBC_Sim(t, u, μ, 2.0);
 
-dictionary = hf.produce_groundstate(model; force=true);
+dictionary = hf.produce_groundstate(model; force=Force);
 
 @testset "Excitations" begin
     ψ₀ = dictionary["groundstate"];
@@ -54,7 +55,7 @@ dictionary = hf.produce_groundstate(model; force=true);
     resolution = 5;
     momenta = range(0, π, resolution);
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
+    exc = hf.produce_excitations(model, momenta, nums; force=Force, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test real(Es)≈Es_norm atol=tol
     @test imag(Es)≈zeros(size(Es)) atol=1e-8

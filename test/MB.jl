@@ -8,6 +8,7 @@ println("
 # INITIALISATION #
 ##################
 
+Force = true
 tol = 1e-1
 
 # Extract name of the current file. Will be used as code name for the simulation.
@@ -51,8 +52,8 @@ model2 = hf.MB_Sim(t2, u2, J2, U13, P, Q, 2.0, bond_dim; code = name*"2");
 # GROUNDSTATE #
 ###############
 
-dictionary = hf.produce_groundstate(model; force=true);
-dictionary2 = hf.produce_groundstate(model2; force=true);
+dictionary = hf.produce_groundstate(model; force=Force);
+dictionary2 = hf.produce_groundstate(model2; force=Force);
 
 @testset "Groundstate" begin
     E_norm = -0.630375296
@@ -80,7 +81,7 @@ end
     momenta = range(0, π, resolution);
     nums = 1;
 
-    exc = hf.produce_excitations(model, momenta, nums; force=true, charges=[1,0.5,1]);
+    exc = hf.produce_excitations(model, momenta, nums; force=Force, charges=[1,0.5,1]);
     Es = exc["Es"];
     @test imag(Es)≈zeros(size(Es)) atol=1e-8
 end
@@ -92,7 +93,7 @@ end
 
 @testset "Tools" begin
     trunc_dim = 5
-    dict_trunc = hf.produce_TruncState(model, trunc_dim; trunc_scheme=1, force=true)
+    dict_trunc = hf.produce_TruncState(model, trunc_dim; trunc_scheme=1, force=Force)
 
     D = hf.dim_state(dictionary["groundstate"])
     @test typeof(D) == Vector{Int64}
