@@ -18,7 +18,9 @@ using Revise
 
 function __init__()
     LinearAlgebra.BLAS.set_num_threads(1)
-    ThreadPinning.pinthreads(:cores)
+    # Uncommenting the following line might enhance performance, 
+    # but could also lead to issues when working on remote clusters where the complete node is not accesible.
+    #ThreadPinning.pinthreads(:cores)
 end
 
 function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1Irrep}})
@@ -29,6 +31,19 @@ end
 abstract type Simulation end
 name(s::Simulation) = string(typeof(s))
 
+"""
+    OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
+
+Construct a parameter set for a 1D one-band Hubbard model.
+
+# Arguments
+- `t`: A vector in which element n is the value of the hopping parameter of distance n. The first element is the nearest-neighbour hopping.
+- `u`: A vector in which element n is the value of the Coulomb interaction with site at distance n-1. The first element is the on-site interaction.
+- `µ`: The chemical potential.
+- `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site.
+- `svalue`: The Schmidt truncation value, used to truncate the in the iDMRG2 algorithm for the computation of the groundstate.
+- `bond_dim`: The maximal bond dimension used to initialize the state.
+"""
 struct OB_Sim <: Simulation
     t::Vector{Float64}
     u::Vector{Float64}
@@ -1115,6 +1130,11 @@ end
 # Plotting #
 ############
 
+"""
+    plot_excitations(momenta, energies; title="Excitation_energies", l_margin=[15mm 0mm])
+
+Plot the obtained energy levels in functions of the momentum.
+"""
 function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[15mm 0mm])
     _, nums = size(Es)
     plot(momenta,real(Es[:,1]), label="", linecolor=:blue, title=title, left_margin=l_margin)
@@ -1125,6 +1145,11 @@ function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[15
     ylabel!("Energy density")
 end
 
+"""
+    plot_spin(model; title="Spin Density", l_margin=[15mm 0mm])
+
+Plot the spin density of the model throughout the unit cell as a heatmap.
+"""
 function plot_spin(model; title="Spin Density", l_margin=[15mm 0mm])
     up, down = hf.density_spin(model)
     Sz = up - down
