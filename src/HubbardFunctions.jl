@@ -32,7 +32,7 @@ abstract type Simulation end
 name(s::Simulation) = string(typeof(s))
 
 """
-    OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
+    OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim=50, period=0; kwargs...)
 
 Construct a parameter set for a 1D one-band Hubbard model.
 
@@ -40,9 +40,10 @@ Construct a parameter set for a 1D one-band Hubbard model.
 - `t`: A vector in which element n is the value of the hopping parameter of distance n. The first element is the nearest-neighbour hopping.
 - `u`: A vector in which element n is the value of the Coulomb interaction with site at distance n-1. The first element is the on-site interaction.
 - `µ`: The chemical potential.
-- `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site.
-- `svalue`: The Schmidt truncation value, used to truncate the in the iDMRG2 algorithm for the computation of the groundstate.
+- `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site, which should be smaller than 2.
+- `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
 - `bond_dim`: The maximal bond dimension used to initialize the state.
+- `Period`: A tag to perform simulations on a helix with circumference `Period`. Value 0 corresponds to an infinite chain.
 """
 struct OB_Sim <: Simulation
     t::Vector{Float64}

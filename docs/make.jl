@@ -10,7 +10,7 @@ run(`powershell -Command "Remove-Item -Recurse -Force '$build_path'"`)
 include(joinpath("..","src","HubbardFunctions.jl"))
 
 makedocs(
-    sitename = "HubbardTN Documentation",
+    sitename = "HubbardTN",
     modules = [HubbardFunctions],
     pages = [
         "Home" => "index.md",
