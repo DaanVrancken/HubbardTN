@@ -2,7 +2,7 @@ module HubbardFunctions
 
 export OB_Sim, MB_Sim, OBC_Sim, MBC_Sim
 export produce_groundstate, produce_excitations, produce_TruncState
-export dim_state, density_spin, density_state, plot_excitations
+export dim_state, density_spin, density_state, plot_excitations, plot_spin
 
 using ThreadPinning
 using LinearAlgebra
@@ -18,9 +18,13 @@ using Revise
 
 function __init__()
     LinearAlgebra.BLAS.set_num_threads(1)
-    # Uncommenting the following line might enhance performance, 
-    # but could also lead to issues when working on remote clusters where the complete node is not accesible.
-    #ThreadPinning.pinthreads(:cores)
+    if haskey(ENV, "SLURM_JOB_ID") || haskey(ENV, "JOB_ID") || haskey(ENV, "PBS_JOBID")
+        # Running on remote cluster
+        ThreadPinning.pinthreads(:affinitymask)
+    else
+        # Running locally
+        ThreadPinning.pinthreads(:cores)
+    end
 end
 
 function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1Irrep}})
