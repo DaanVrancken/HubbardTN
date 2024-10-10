@@ -970,6 +970,30 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
     return data
 end
 
+"""
+    produce_bandgap(model::Simulation; resolution=5, force=false)
+
+Compute or load the band gap of the desired model.
+"""
+function produce_bandgap(simul::Simulation; resolution=5, force=false)
+    momenta = range(0, π, resolution)
+    Exc_hole = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,-1])
+    Exc_elec = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,1])
+
+    E_hole = real(Exc_hole["Es"])
+    E_elec = real(Exc_elec["Es"])
+
+    E_tot = E_hole + E_elec
+
+    gap, k = findmin(E_tot[:,1])
+
+    if k != 0
+        @warn "Indirect band gap! Higher resolution might be required."
+    end
+
+    return gap, momenta[k]
+end
+
 
 ##############
 # Truncation #
@@ -1151,11 +1175,11 @@ function plot_excitations(momenta, Es; title="Excitation energies", l_margin=[15
 end
 
 """
-    plot_spin(model; title="Spin Density", l_margin=[15mm 0mm])
+    plot_spin(model::Simulation; title="Spin Density", l_margin=[15mm 0mm])
 
 Plot the spin density of the model throughout the unit cell as a heatmap.
 """
-function plot_spin(model; title="Spin Density", l_margin=[15mm 0mm])
+function plot_spin(model::Simulation; title="Spin Density", l_margin=[15mm 0mm])
     up, down = hf.density_spin(model)
     Sz = up - down
     heatmap(Sz, color=:grays, c=:grays, label="", xlabel="Site", ylabel="Band", title=title, clims=(-1, 1))
