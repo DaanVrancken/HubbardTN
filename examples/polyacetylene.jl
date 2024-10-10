@@ -64,4 +64,8 @@ Es = exc["Es"];
 println("Excitation energies: ")
 println(Es)
 
-println("Band Gap for s=$s: $(real(Es[1,1]))")
+println("Exciton for s=$s: $(real(Es[1,1]))")
+
+gap, k = hf.produce_bandgap(model)
+
+println("Band Gap for s=$s: $gap eV at momentum $k")
