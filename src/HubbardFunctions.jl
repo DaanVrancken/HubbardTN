@@ -987,7 +987,7 @@ function produce_bandgap(simul::Simulation; resolution=5, force=false)
 
     gap, k = findmin(E_tot[:,1])
 
-    if k != 0
+    if k != 1
         @warn "Indirect band gap! Higher resolution might be required."
     end
 
