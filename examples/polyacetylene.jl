@@ -51,9 +51,9 @@ println("Groundstate energy: $E")
 println("Bond dimension: $(hf.dim_state(ψ₀))")
 
 
-########################
+#######################
 # COMPUTE EXCITATIONS #
-########################
+#######################
 
 resolution = 5;
 momenta = range(0, π, resolution);
