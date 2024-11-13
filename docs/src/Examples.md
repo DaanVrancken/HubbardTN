@@ -41,11 +41,12 @@ model_OB = hf.OB_Sim(t, u, μ, P, Q, s, bond_dim; spin=false);
 
 The Schmidt cut ```s``` determines to which value the bond dimension is grown by the iDMRG2 algorithm, while ```bond_dim``` is the maximal value used for the initialization of the MPS.
 
-Note that, in order to preserve injectivity, a unit cell of size ```Q``` is used if ```P```is even and of size ```2*Q``` if ```P``` is odd. Therefore, filling ratios that deviate from half filling ```P=Q=1``` tend to be more intensive.
+> **NOTE:**
+> In order to preserve injectivity, a unit cell of size ```Q``` is used if ```P```is even and of size ```2*Q``` if ```P``` is odd. Therefore, filling ratios that deviate from half filling ```P=Q=1``` tend to be more intensive.
 
 Finally, the tag ```spin``` determines if spin up and down have to be treated independently. If ```spin=false```, an additional $SU(2)$ symmetry is imposed, reducing the local Hilbert space dimension to 3 and leading to a substantial speed up. However, no information about the spin of a state can be retrieved.
 
-```MBC_Sim()``` works similarly. Now, we either provide a chemical potential or a filling.
+```OBC_Sim()``` works similarly. Now, we either provide a chemical potential or a filling.
 ```
 model_OBC_1 = hf.OBC_Sim(t, u, P/Q, s, bond_dim; mu=false)
 model_OBC_2 = hf.OBC_Sim(t, u, μ, s, bond_dim; mu=true)
@@ -77,7 +78,8 @@ model_MB = hf.MB_Sim(t, u, J, U13, P, Q, s, bond_dim; code = name, spin=false, f
 ```
 Where the one-band model used vectors for ```t``` and ```u```, the multi-band model concatenates matrices horizontally. In addition, the exchange $J$ and $U_{ijjj}$ parameters, with zeros on the diagonals as these are included in ```u```, are implemented as well. Since those parameters are usually rather small, ```U13``` is an optional argument.
 
-When the parameters are changed but you want to keep the name of the model the same, you should put ```force=true``` to overwrite the previous results, obtained with the old parameters.
+> **NOTE:**
+> When the parameters are changed but you want to keep the name of the model the same, you should put ```force=true``` to overwrite the previous results, obtained with the old parameters. Be cautious for accidentally overwriting data that you want to keep.
 
 For a ```MBC_Sim``` structure, we would have
 ```
