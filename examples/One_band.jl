@@ -14,41 +14,41 @@ using DrWatson
 include(projectdir("src", "HubbardFunctions.jl"))
 import .HubbardFunctions as hf
 
-# Extract name of the current file. Will be used as code name for the simulation.
-name_jl = last(splitpath(Base.source_path()))
-name = first(split(name_jl,"."))
-
 
 #################
 # DEFINE SYSTEM #
 #################
 
-s = 2.0
+P=1;
+Q=1;
 
-t_OS = [-0.784  2.588; 2.588 -0.784];
-t_IS = [0.0345 2.745; -0.036 0.0345];
-t = cat(t_OS,t_IS, dims=2)
-U = [9.86 5.7656; 5.7656 9.86];
-J = [0.0 0.096; 0.096 0.0]
+t=[1.0, 0.1];
+u=[8.0];
+μ=0.0;
 
-P = 1;
-Q = 1;
+s = 2.0;
 bond_dim = 20;
 
-model = hf.MB_Sim(t, U, J, P, Q, s, bond_dim; code = name);
+model = hf.OB_Sim(t, u, μ, P, Q, s, bond_dim; spin=false);
+dictionary = hf.produce_groundstate(model; force=false);
+ψ₀ = dictionary["groundstate"];
+H = dictionary["ham"];
+E0 = expectation_value(ψ₀, H);
+sum(real(E0))/length(H)
 
 
 ########################
 # COMPUTE GROUNDSTATES #
 ########################
 
-dictionary = hf.produce_groundstate(model);
+dictionary = hf.produce_groundstate(model; force=false);
 ψ₀ = dictionary["groundstate"];
 H = dictionary["ham"];
 E0 = expectation_value(ψ₀, H);
-E = sum(real(E0))./length(H);
+E = sum(real(E0))/length(H)
+
 println("Groundstate energy: $E")
-println("Bond dimension: $(hf.dim_state(ψ₀))")
+println("Bond dimension: $(dim_state(ψ₀))")
 
 
 ########################

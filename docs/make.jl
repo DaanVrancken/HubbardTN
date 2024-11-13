@@ -14,6 +14,8 @@ makedocs(
     modules = [HubbardFunctions],
     pages = [
         "Home" => "index.md",
+        "Library" => "Functions.md",
+        "Examples" => "Examples.md",
     ],
     format = Documenter.HTML(inventory_version = "0.1.0"),
     clean = true,

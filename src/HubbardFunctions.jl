@@ -1,7 +1,7 @@
 module HubbardFunctions
 
 export OB_Sim, MB_Sim, OBC_Sim, MBC_Sim
-export produce_groundstate, produce_excitations, produce_TruncState
+export produce_groundstate, produce_excitations, produce_bandgap, produce_TruncState
 export dim_state, density_spin, density_state, plot_excitations, plot_spin
 
 using ThreadPinning
@@ -32,22 +32,34 @@ function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1I
     return "[fℤ₂×SU₂×U₁]$(parts)"
 end
 
+function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,U1Irrep,U1Irrep}})
+    parts = map(x -> sprint(show, x; context=:typeinfo => typeof(x)), s.sectors)
+    return "[fℤ₂×U₁×U₁]$(parts)"
+end
+
+function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep}})
+    parts = map(x -> sprint(show, x; context=:typeinfo => typeof(x)), s.sectors)
+    return "[fℤ₂×SU₂]$(parts)"
+end
+
 abstract type Simulation end
 name(s::Simulation) = string(typeof(s))
 
 """
     OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim=50, period=0; kwargs...)
 
-Construct a parameter set for a 1D one-band Hubbard model.
+Construct a parameter set for a 1D one-band Hubbard model with a fixed number of particles.
 
 # Arguments
-- `t`: A vector in which element n is the value of the hopping parameter of distance n. The first element is the nearest-neighbour hopping.
-- `u`: A vector in which element n is the value of the Coulomb interaction with site at distance n-1. The first element is the on-site interaction.
+- `t`: Vector in which element ``n`` is the value of the hopping parameter of distance ``n``. The first element is the nearest-neighbour hopping.
+- `u`: Vector in which element ``n`` is the value of the Coulomb interaction with site at distance ``n-1``. The first element is the on-site interaction.
 - `µ`: The chemical potential.
-- `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site, which should be smaller than 2.
+- `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site, which should be larger than 0 and smaller than 2.
 - `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
 - `bond_dim`: The maximal bond dimension used to initialize the state.
-- `Period`: A tag to perform simulations on a helix with circumference `Period`. Value 0 corresponds to an infinite chain.
+- `Period`: Perform simulations on a helix with circumference `Period`. Value 0 corresponds to an infinite chain.
+
+Put the optional argument `spin=true` to perform spin-dependent calculations.
 """
 struct OB_Sim <: Simulation
     t::Vector{Float64}
@@ -65,6 +77,25 @@ struct OB_Sim <: Simulation
 end
 name(::OB_Sim) = "OB"
 
+"""
+    MB_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, U13::Matrix{Float64}, P=1, Q=1, svalue=2.0, bond_dim=50; kwargs...)
+
+Construct a parameter set for a 1D B-band Hubbard model with a fixed number of particles.
+
+# Arguments
+- `t`: Bx(nB) matrix in which element ``(i,j)`` is the hopping parameter from band ``i`` to band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... hopping matrices are concatenated horizontally.
+- `u`: Bx(nB) matrix in which element ``(i,j)`` is the Coulomb repulsion ``U_{ij}=U_{iijj}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally.
+- `J`: Bx(nB) matrix in which element ``(i,j)`` is the exchange ``J_{ij}=U_{ijji}=U_{ijij}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored.
+- `U13`: Bx(nB) matrix in which element ``(i,j)`` is the parameter ``U_{ijjj}=U_{jijj}=U_{jjij}=U_{jjji}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored. This argument is optional.
+- `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site, which should be larger than 0 and smaller than 2.
+- `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
+- `bond_dim`: The maximal bond dimension used to initialize the state.
+
+Put the optional argument 'spin=true' to perform spin-dependent calculations. 
+
+Use the optional argument `name` to assign a name to the model. 
+This is used to destinguish between different parameter sets: Wrong results could be loaded or overwritten if not used consistently!!!
+"""
 struct MB_Sim <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + Bx(B*range) matrix for IS
     u::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + Bx(B*range) matrix for IS
@@ -85,6 +116,21 @@ struct MB_Sim <: Simulation
 end
 name(::MB_Sim) = "MB"
 
+"""
+    OBC_Sim(t::Vector{Float64}, u::Vector{Float64}, μf::Float64, svalue=2.0, bond_dim=50, period=0; mu=true, kwargs...)
+
+Construct a parameter set for a 1D one-band Hubbard model with the number of particles determined by a chemical potential.
+
+# Arguments
+- `t`: Vector in which element ``n`` is the value of the hopping parameter of distance ``n``. The first element is the nearest-neighbour hopping.
+- `u`: Vector in which element ``n`` is the value of the Coulomb interaction with site at distance ``n-1``. The first element is the on-site interaction.
+- `µf`: The chemical potential, if `mu=true`. Otherwise, the filling of the system. The chemical potential corresponding to the given filling is determined automatically.
+- `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
+- `bond_dim`: The maximal bond dimension used to initialize the state.
+- `Period`: Perform simulations on a helix with circumference `Period`. Value 0 corresponds to an infinite chain.
+
+Spin-dependent calculations are not yet implemented.
+"""
 struct OBC_Sim <: Simulation
     t::Vector{Float64}
     u::Vector{Float64}
@@ -123,6 +169,24 @@ struct OBC_Sim2 <: Simulation
 end
 name(::OBC_Sim2) = "OBC2"
 
+"""
+    MBC_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, U13::Matrix{Float64}, svalue=2.0, bond_dim=50; kwargs...)
+
+Construct a parameter set for a 1D ``B``-band Hubbard model with the number of particles determined by a chemical potential.
+
+# Arguments
+- `t`: ``B\\times nB`` matrix in which element ``(i,j)`` is the hopping parameter from band ``i`` to band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... hopping matrices are concatenated horizontally. The diagonal terms of the on-site matrix determine the filling.
+- `u`: ``B\\times nB`` matrix in which element ``(i,j)`` is the Coulomb repulsion ``U_{ij}=U_{iijj}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally.
+- `J`: ``B\\times nB`` matrix in which element ``(i,j)`` is the exchange ``J_{ij}=U_{ijji}=U_{ijij}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored.
+- `U13`: ``B\\times nB`` matrix in which element ``(i,j)`` is the parameter ``U_{ijjj}=U_{jijj}=U_{jjij}=U_{jjji}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored. This argument is optional.
+- `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
+- `bond_dim`: The maximal bond dimension used to initialize the state.
+
+Spin-dependent calculations are not yet implemented. 
+
+Use the optional argument `name` to assign a name to the model. 
+This is used to destinguish between different parameter sets: Wrong results could be loaded or overwritten if not used consistently!!!
+"""
 struct MBC_Sim <: Simulation
     t::Matrix{Float64}                        #convention: number of bands = number of rows, BxB for on-site + Bx(B*range) matrix for IS
     u::Matrix{Float64}                        #convention: BxB matrix for OS (with OB on diagonal) + Bx(B*range) matrix for IS
@@ -280,7 +344,7 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     u = simul.u
     μ = simul.μ
     L = simul.period
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
 
     D_hop = length(t)
     D_int = length(u)
@@ -582,7 +646,7 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     u = simul.u
     J = simul.J
     U13 = simul.U13
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
@@ -742,9 +806,9 @@ function initialize_mps(operator, max_dimension::Int64)
     return InfiniteMPS(Ps, V_trunc)
 end
 
-function compute_groundstate(simul::Union{OB_Sim, MB_Sim, OBC_Sim2, MBC_Sim}; tol=1e-6, verbosity=0, maxiter=1000)
+function compute_groundstate(simul::Union{OB_Sim, MB_Sim, OBC_Sim2, MBC_Sim}; tol::Float64=1e-6, verbosity::Int64=0, maxiter::Int64=1000)
     H = hamiltonian(simul)
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
     if hasproperty(simul, :P)
         ψ₀ = initialize_mps(H,simul.P,simul.bond_dim,spin)
     else
@@ -769,14 +833,14 @@ function compute_groundstate(simul::Union{OB_Sim, MB_Sim, OBC_Sim2, MBC_Sim}; to
         end
     end
     
-    alg = VUMPS(; maxiter=maxiter, tol=1e-5, verbosity=verbosity) &
+    alg = VUMPS(; maxiter=maxiter, tol=1e-6, verbosity=verbosity) &
         GradientGrassmann(; maxiter=maxiter, tol=tol, verbosity=verbosity)
     ψ, envs, δ = find_groundstate(ψ₀, H, alg)
     
     return Dict("groundstate" => ψ, "environments" => envs, "ham" => H, "delta" => δ, "config" => simul)
 end
 
-function compute_groundstate(simul::OBC_Sim; tol=1e-6, verbosity=0, maxiter=1000)
+function compute_groundstate(simul::OBC_Sim; tol::Float64=1e-6, verbosity::Int64=0, maxiter::Int64=1000)
     verbosity_mu = get(simul.kwargs, :verbosity_mu, 0)
     t = simul.t
     u = simul.u
@@ -872,11 +936,16 @@ function compute_groundstate(simul::OBC_Sim; tol=1e-6, verbosity=0, maxiter=1000
     return dictionary
 end
 
-function produce_groundstate(simul::Union{MB_Sim, MBC_Sim}; force=false)
+"""
+    produce_groundstate(model::Simulation; force::Bool=false)
+
+Compute or load groundstate of the `model`. If `force=true`, overwrite existing calculation.
+"""
+function produce_groundstate(simul::Union{MB_Sim, MBC_Sim}; force::Bool=false)
     code = get(simul.kwargs, :code, "")
     S = ""
     if hasproperty(simul, :Q)
-        spin = get(simul.kwargs, :spin, false)
+        spin::Bool = get(simul.kwargs, :spin, false)
         if spin
             S = "spin_"
         end
@@ -886,12 +955,12 @@ function produce_groundstate(simul::Union{MB_Sim, MBC_Sim}; force=false)
     return data
 end
 
-function produce_groundstate(simul::Union{OB_Sim, OBC_Sim}; force=false)
+function produce_groundstate(simul::Union{OB_Sim, OBC_Sim}; force::Bool=false)
     t = simul.t 
     u = simul.u
     S_spin = ""
     if hasproperty(simul, :Q)
-        spin = get(simul.kwargs, :spin, false)
+        spin::Bool = get(simul.kwargs, :spin, false)
         if spin
             S_spin = "spin_"
         end
@@ -914,7 +983,7 @@ function compute_excitations(simul::Simulation, momenta, nums::Int64;
     if trunc_dim<0
         return error("Trunc_dim should be a positive integer.")
     end
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
 
     if hasproperty(simul, :Q)
         Q = simul.Q
@@ -941,11 +1010,23 @@ function compute_excitations(simul::Simulation, momenta, nums::Int64;
     return Dict("Es" => Es, "qps" => qps, "momenta" => momenta)
 end
 
+"""
+    produce_excitations(model::Simulation, momenta, nums::Int64; force::Bool=false, charges::Vector{Float64}=[0,0.0,0], kwargs...)
+
+Compute or load quasiparticle excitations of the desired `model`.
+
+# Arguments
+- `model`: Model for which excitations are sought.
+- `momenta`: Momenta of the quasiparticle excitations.
+- `nums`: Number of excitations.
+- `force`: If true, overwrite existing calculation.
+- `charges`: Charges of the symmetry sector of the excitations.
+"""
 function produce_excitations(simul::Simulation, momenta, nums::Int64; 
-                                    force=false, charges::Vector{Float64}=[0,0.0,0], 
+                                    force::Bool=false, charges::Vector{Float64}=[0,0.0,0], 
                                     trunc_dim::Int64=0, trunc_scheme::Int64=0, 
                                     solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
     S = ""
     if typeof(momenta)==Float64
         momenta_string = "_mom=$momenta"
@@ -971,11 +1052,11 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
 end
 
 """
-    produce_bandgap(model::Simulation; resolution=5, force=false)
+    produce_bandgap(model::Simulation; resolution::Int64=5, force::Bool=false)
 
 Compute or load the band gap of the desired model.
 """
-function produce_bandgap(simul::Simulation; resolution=5, force=false)
+function produce_bandgap(simul::Simulation; resolution::Int64=5, force::Bool=false)
     momenta = range(0, π, resolution)
     Exc_hole = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,-1])
     Exc_elec = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,1])
@@ -999,8 +1080,7 @@ end
 # Truncation #
 ##############
 
-function TruncState(simul::Simulation, trunc_dim::Int64; 
-                            trunc_scheme::Int64=0)
+function TruncState(simul::Simulation, trunc_dim::Int64; trunc_scheme::Int64=0)
     if trunc_dim<=0
         return error("trunc_dim should be a positive integer.")
     end
@@ -1019,8 +1099,18 @@ function TruncState(simul::Simulation, trunc_dim::Int64;
     return  Dict("ψ_trunc" => ψ, "envs_trunc" => envs)
 end
 
-function produce_TruncState(simul::Simulation, trunc_dim::Int64; 
-                                    trunc_scheme::Int64=0, force=false)
+"""
+    produce_truncstate(model::Simulation, trunc_dim::Int64; trunc_scheme::Int64=0, force::Bool=false)
+
+Compute or load a truncated approximation of the groundstate.
+
+# Arguments
+- `model`: Model for which the groundstate is to be truncated.
+- `trunc_dim`: Maximal bond dimension of the truncated state.
+- `trunc_scheme`: Scheme to perform the truncation. 0 = VUMPSSvdCut. 1 = SvdCut.
+- `force`: If true, overwrite existing calculation.
+"""
+function produce_TruncState(simul::Simulation, trunc_dim::Int64; trunc_scheme::Int64=0, force::Bool=false)
     code = get(simul.kwargs, :code, "")
     data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="Trunc_GS_"*code*"_dim=$trunc_dim"*"_scheme=$trunc_scheme", force=force) do cfg
         return TruncState(cfg, trunc_dim; trunc_scheme=trunc_scheme)
@@ -1033,6 +1123,11 @@ end
 # State properties #
 ####################
 
+"""
+    dim_state(ψ::InfiniteMPS)
+
+Determine the bond dimensions in an infinite MPS.
+"""
 function dim_state(ψ::InfiniteMPS)
     dimension = Int64.(zeros(length(ψ)))
     for i in 1:length(ψ)
@@ -1041,6 +1136,11 @@ function dim_state(ψ::InfiniteMPS)
     return dimension
 end
 
+"""
+    density_spin(model::Union{OB_Sim,MB_Sim})
+
+Compute the density of spin up and spin down per site in the unit cell for the ground state.
+"""
 function density_spin(simul::Union{OB_Sim,MB_Sim})
     P = simul.P;
     Q = simul.Q
@@ -1048,7 +1148,7 @@ function density_spin(simul::Union{OB_Sim,MB_Sim})
     dictionary = produce_groundstate(simul);
     ψ₀ = dictionary["groundstate"];
     
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
 
     if !spin
         error("This system is spin independent.")
@@ -1057,7 +1157,7 @@ function density_spin(simul::Union{OB_Sim,MB_Sim})
     return density_spin(ψ₀, P, Q)
 end
 
-function density_spin(ψ₀, P, Q)
+function density_spin(ψ₀::InfiniteMPS, P::Int64, Q::Int64)
     I, Ps = SymSpace(P,Q,true)
     if iseven(P)
         T = Q
@@ -1085,6 +1185,11 @@ function density_spin(ψ₀, P, Q)
     return Nup, Ndown
 end
 
+"""
+    density_state(model::Simulation)
+
+Compute the number of electrons per site in the unit cell for the ground state.
+"""
 function density_state(simul::Union{OB_Sim,MB_Sim})
     P = simul.P;
     Q = simul.Q
@@ -1092,7 +1197,7 @@ function density_state(simul::Union{OB_Sim,MB_Sim})
     dictionary = produce_groundstate(simul);
     ψ₀ = dictionary["groundstate"];
     
-    spin = get(simul.kwargs, :spin, false)
+    spin::Bool = get(simul.kwargs, :spin, false)
 
     return density_state(ψ₀, P, Q, spin)
 end
@@ -1105,7 +1210,7 @@ function density_state(simul::Union{OBC_Sim, MBC_Sim})
 end
 
 # For Hubbard models without chemical potential
-function density_state(ψ₀,P::Int64,Q::Int64,spin)
+function density_state(ψ₀::InfiniteMPS,P::Int64,Q::Int64,spin::Bool)
     if iseven(P)
         T = Q
     else 
