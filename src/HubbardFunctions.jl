@@ -141,6 +141,10 @@ struct OBC_Sim <: Simulation
     period::Int64
     kwargs
     function OBC_Sim(t, u, μf::Float64, svalue=2.0, bond_dim = 50, period = 0; mu=true, kwargs...)
+        spin::Bool = get(kwargs, :spin, false)
+        if spin
+            error("Spin not implemented.")
+        end
         if mu
             return new(t, u, μf, nothing, svalue, bond_dim, period, kwargs)
         else
@@ -196,10 +200,18 @@ struct MBC_Sim <: Simulation
     bond_dim::Int64
     kwargs
     function MBC_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, svalue=2.0, bond_dim = 50; kwargs...)
+        spin::Bool = get(kwargs, :spin, false)
+        if spin
+            error("Spin not implemented.")
+        end
         Bands,_ = size(t)
         return new(t, u, J, zeros(Bands,Bands), svalue, bond_dim, kwargs)
     end
-    function MB_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, U13::Matrix{Float64}, svalue=2.0, bond_dim = 50; kwargs...)
+    function MBC_Sim(t::Matrix{Float64}, u::Matrix{Float64}, J::Matrix{Float64}, U13::Matrix{Float64}, svalue=2.0, bond_dim = 50; kwargs...)
+        spin::Bool = get(kwargs, :spin, false)
+        if spin
+            error("Spin not implemented.")
+        end
         return new(t, u, J, U13, svalue, bond_dim, kwargs)
     end
 end
@@ -386,7 +398,7 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
         h = @mpoham sum(-t[1]*twosite{i,i+1} -t[1]*twosite{i,i+L} for i in vertices(InfiniteChain(T)))
         H += h
     else
-        return error("No extended models in 2D.")
+        return error("Extended models in 2D not implemented.")
     end
 
     return H
@@ -404,11 +416,12 @@ function OS_Hopping(t,T,cdc)
     for i in 1:Bands
         for j in (i+1):Bands
             if t[i,j] ≠ t'[i,j]
-                @warn "t_OS is not Hermitian"
+                @warn "t_OS is not Hermitian, average is taken."
             end
         end
     end
     
+    twosite = cdc + cdc'
     Lattice = InfiniteStrip(Bands,T*Bands)
         
     # Define necessary different indices of sites/orbitals in the lattice
@@ -416,7 +429,7 @@ function OS_Hopping(t,T,cdc)
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
                for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
-    return @mpoham sum(-t[bi,bf]*cdc{Lattice[bf,site],Lattice[bi,site]} for (site, bi, bf) in Indices)
+    return @mpoham sum(-0.5*t[bi,bf]*twosite{Lattice[bf,site],Lattice[bi,site]} for (site, bi, bf) in Indices)
 end
 
 # t[i,j] gives the hopping of band i on one site to band j on the range^th next site
@@ -833,7 +846,7 @@ function compute_groundstate(simul::Union{OB_Sim, MB_Sim, OBC_Sim2, MBC_Sim}; to
         end
     end
     
-    alg = VUMPS(; maxiter=maxiter, tol=1e-6, verbosity=verbosity) &
+    alg = VUMPS(; maxiter=maxiter, tol=tol, verbosity=verbosity) &
         GradientGrassmann(; maxiter=maxiter, tol=tol, verbosity=verbosity)
     ψ, envs, δ = find_groundstate(ψ₀, H, alg)
     
@@ -943,12 +956,10 @@ Compute or load groundstate of the `model`. If `force=true`, overwrite existing 
 """
 function produce_groundstate(simul::Union{MB_Sim, MBC_Sim}; force::Bool=false)
     code = get(simul.kwargs, :code, "")
-    S = ""
-    if hasproperty(simul, :Q)
-        spin::Bool = get(simul.kwargs, :spin, false)
-        if spin
-            S = "spin_"
-        end
+    S = "nospin_"
+    spin::Bool = get(simul.kwargs, :spin, false)
+    if spin
+        S = "spin_"
     end
 
     data, _ = produce_or_load(compute_groundstate, simul, datadir("sims", name(simul)); prefix="groundstate_"*S*code, force=force)
@@ -958,12 +969,10 @@ end
 function produce_groundstate(simul::Union{OB_Sim, OBC_Sim}; force::Bool=false)
     t = simul.t 
     u = simul.u
-    S_spin = ""
-    if hasproperty(simul, :Q)
-        spin::Bool = get(simul.kwargs, :spin, false)
-        if spin
-            S_spin = "spin_"
-        end
+    S_spin = "nospin_"
+    spin::Bool = get(simul.kwargs, :spin, false)
+    if spin
+        S_spin = "spin_"
     end
     S = "groundstate_"*S_spin*"t$(t)_u$(u)"
     S = replace(S, ", " => "_")
