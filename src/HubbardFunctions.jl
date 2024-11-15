@@ -760,7 +760,7 @@ function initialize_mps(operator, P::Int64, max_dimension::Int64, spin::Bool)
     if !spin
         Vmax = Vect[(FermionParity ⊠ Irrep[SU₂] ⊠ Irrep[U₁])]((0,0,0)=>1)     # find maximal virtual space
         for i in 0:1
-            for j in 0:1//2:3//2
+            for j in 0:1//2:3
                 for k in -(L*P):1:(L*P)
                     Vmax = Vect[(FermionParity ⊠ Irrep[SU₂] ⊠ Irrep[U₁])]((i,j,k)=>max_dimension) ⊕ Vmax
                 end
@@ -803,7 +803,7 @@ function initialize_mps(operator, max_dimension::Int64)
     Vmax = Vect[(FermionParity ⊠ Irrep[SU₂])]((0,0)=>1)     # find maximal virtual space
 
     for i in 0:1
-        for j in 0:1//2:3//2
+        for j in 0:1//2:3
             Vmax = Vect[(FermionParity ⊠ Irrep[SU₂])]((i,j)=>max_dimension) ⊕ Vmax
         end
     end
