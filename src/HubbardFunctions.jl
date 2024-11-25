@@ -243,7 +243,7 @@ function Hopping(P,Q,spin)
     
         c⁺u = TensorMap(zeros, ComplexF64, Ps ← Ps ⊗ Vup)
         blocks(c⁺u)[I((1, 1, Q-P))] .= 1
-        blocks(c⁺u)[I((0, 0, 2*Q-P))] .= 1
+        blocks(c⁺u)[I((0, 0, 2*Q-P))] .= -1
         cu = TensorMap(zeros, ComplexF64, Vup ⊗ Ps ← Ps)
         blocks(cu)[I((1, 1, Q-P))] .= 1
         blocks(cu)[I((0, 0, 2*Q-P))] .= 1
@@ -253,7 +253,7 @@ function Hopping(P,Q,spin)
         blocks(c⁺d)[I((0, 0, 2*Q-P))] .= 1
         cd = TensorMap(zeros, ComplexF64, Vdown ⊗ Ps ← Ps)
         blocks(cd)[I((1, -1, Q-P))] .= 1
-        blocks(cd)[I((0, 0, 2*Q-P))] .= 1
+        blocks(cd)[I((0, 0, 2*Q-P))] .= -1
     
         @planar twosite_up[-1 -2; -3 -4] := c⁺u[-1; -3 1] * cu[1 -2; -4]
         @planar twosite_down[-1 -2; -3 -4] := c⁺d[-1; -3 1] * cd[1 -2; -4]
@@ -416,12 +416,11 @@ function OS_Hopping(t,T,cdc)
     for i in 1:Bands
         for j in (i+1):Bands
             if t[i,j] ≠ t'[i,j]
-                @warn "t_OS is not Hermitian, average is taken."
+                @warn "t_OS is not Hermitian."
             end
         end
     end
     
-    twosite = cdc + cdc'
     Lattice = InfiniteStrip(Bands,T*Bands)
         
     # Define necessary different indices of sites/orbitals in the lattice
@@ -429,7 +428,7 @@ function OS_Hopping(t,T,cdc)
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
                for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
-    return @mpoham sum(-0.5*t[bi,bf]*twosite{Lattice[bf,site],Lattice[bi,site]} for (site, bi, bf) in Indices)
+    return @mpoham sum(-t[bi,bf]*cdc{Lattice[bf,site],Lattice[bi,site]} for (site, bi, bf) in Indices)
 end
 
 # t[i,j] gives the hopping of band i on one site to band j on the range^th next site
