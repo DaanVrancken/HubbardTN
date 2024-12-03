@@ -46,13 +46,14 @@ abstract type Simulation end
 name(s::Simulation) = string(typeof(s))
 
 """
-    OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim=50, period=0; kwargs...)
+    OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ=0.0, J::Vector{Float64}, P=1, Q=1, svalue=2.0, bond_dim=50, period=0; kwargs...)
 
 Construct a parameter set for a 1D one-band Hubbard model with a fixed number of particles.
 
 # Arguments
 - `t`: Vector in which element ``n`` is the value of the hopping parameter of distance ``n``. The first element is the nearest-neighbour hopping.
 - `u`: Vector in which element ``n`` is the value of the Coulomb interaction with site at distance ``n-1``. The first element is the on-site interaction.
+- `J`: Vector in which element ``n`` is the value of the exchange interaction with site at distance ``n``. The first element is the nearest-neighbour exchange.
 - `µ`: The chemical potential.
 - `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site, which should be larger than 0 and smaller than 2.
 - `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
@@ -65,14 +66,18 @@ struct OB_Sim <: Simulation
     t::Vector{Float64}
     u::Vector{Float64}
     μ::Float64
+    J::Vector{Float64}
     P::Int64
     Q::Int64
     svalue::Float64
     bond_dim::Int64
     period::Int64
     kwargs
-    function OB_Sim(t, u, μ=0.0, P=1, Q=1, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
-        return new(t, u, μ, P, Q, svalue, bond_dim, period, kwargs)
+    function OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ::Float64=0.0, P::Int64=1, Q::Int64=1, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
+        return new(t, u, μ, [0.0], P, Q, svalue, bond_dim, period, kwargs)
+    end
+    function OB_Sim(t::Vector{Float64}, u::Vector{Float64}, μ::Float64=0.0, J::Vector{Float64}=[0.0], P::Int64=1, Q::Int64=1, svalue=2.0, bond_dim = 50, period = 0; kwargs...)
+        return new(t, u, μ, J, P, Q, svalue, bond_dim, period, kwargs)
     end
 end
 name(::OB_Sim) = "OB"
@@ -355,11 +360,13 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     t = simul.t
     u = simul.u
     μ = simul.μ
+    J = simul.J
     L = simul.period
     spin::Bool = get(simul.kwargs, :spin, false)
 
     D_hop = length(t)
     D_int = length(u)
+    D_exc = length(J)
     
     if hasproperty(simul, :P)
         P = simul.P
@@ -383,6 +390,8 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     onesite = u[1]*OSI - μ*n
 
     @planar nn[-1 -2; -3 -4] := n[-1; -3] * n[-2; -4]
+    @tensor J1[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[-2 3; 2 -3]
+    @tensor J2[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[3 -2; -3 2]
     
     H = @mpoham sum(onesite{i} for i in vertices(InfiniteChain(T)))
     if L == 0
@@ -393,6 +402,11 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
         for range_int in 2:D_int
             h = @mpoham sum(u[range_int]*nn{i,i+range_int} for i in vertices(InfiniteChain(T)))
             H += h
+        end
+        for range_exc in 1:D_exc
+            h1 = @mpoham sum(J[range_exc]*J1{i,i+range_exc} for i in vertices(InfiniteChain(T)))
+            h2 = @mpoham sum(0.5*J[range_exc]*J2{i,i+range_exc} + 0.5*J[range_exc]*J2{i+range_exc,i} for i in vertices(InfiniteChain(T)))
+            H += h1 + h2
         end
     elseif D_hop==1 && D_int==1
         h = @mpoham sum(-t[1]*twosite{i,i+1} -t[1]*twosite{i,i+L} for i in vertices(InfiniteChain(T)))
@@ -968,12 +982,13 @@ end
 function produce_groundstate(simul::Union{OB_Sim, OBC_Sim}; force::Bool=false)
     t = simul.t 
     u = simul.u
+    J = simul.J
     S_spin = "nospin_"
     spin::Bool = get(simul.kwargs, :spin, false)
     if spin
         S_spin = "spin_"
     end
-    S = "groundstate_"*S_spin*"t$(t)_u$(u)"
+    S = "groundstate_"*S_spin*"t$(t)_u$(u)_J$(J)"
     S = replace(S, ", " => "_")
     data, _ = produce_or_load(compute_groundstate, simul, datadir("sims", name(simul)); prefix=S, force=force)
     return data
@@ -1268,9 +1283,9 @@ function density_state(ψ::InfiniteMPS)
 end
 
 
-############
-# Plotting #
-############
+####################
+# Tools & Plotting #
+####################
 
 """
     plot_excitations(momenta, energies; title="Excitation_energies", l_margin=[15mm 0mm])
@@ -1296,6 +1311,50 @@ function plot_spin(model::Simulation; title="Spin Density", l_margin=[15mm 0mm])
     up, down = hf.density_spin(model)
     Sz = up - down
     heatmap(Sz, color=:grays, c=:grays, label="", xlabel="Site", ylabel="Band", title=title, clims=(-1, 1))
+end
+
+"""
+    extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
+
+Extract the parameters from a params.jl file located at path in PyFoldHub format.
+"""
+function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
+    include(path)
+
+    B = size(Wmn)[5]
+    site_0 = ceil(Int,size(Wmn)[1]/2)
+
+    t = zeros(B,B*range_t)
+    U = zeros(B,B*range_u)
+    J = zeros(B,B)
+    U13 = zeros(B,B)
+    for i in 1:B
+        for j in 1:B
+            for r in 0:(range_t-1)
+                t[i,j+r*B] = tmn[site_0+r,i,j] - corr[1,site_0+r,i,j] - corr[2,site_0+r,i,j]
+            end
+            for r in 0:(range_u-1)
+                U[i,j+r*B] = Wmn[site_0,site_0,site_0+r,site_0+r,i,i,j,j]
+            end
+            if i != j
+                J[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,i]
+                if !(J[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,i,j,i,j])
+                    error("J1 is not equal to J2")
+                end
+                U13[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,j]
+                if !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,i,j,j]) || !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,i,j]) || 
+                    !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,j,i])
+                    error("U13 not consistent")
+                end
+            end
+        end
+    end
+
+    #shift chemical potential
+    mu = minimum(diag(t[:,1:B]))
+    t[:,1:B] -= mu.*I
+
+    return t, U, J, U13
 end
 
         
