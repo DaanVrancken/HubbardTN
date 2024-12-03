@@ -399,8 +399,8 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
             h = @mpoham sum(-t[range_hop]*twosite{i,i+range_hop} for i in vertices(InfiniteChain(T)))
             H += h
         end
-        for range_int in 2:D_int
-            h = @mpoham sum(u[range_int]*nn{i,i+range_int} for i in vertices(InfiniteChain(T)))
+        for range_int in 2:D_int  # first element is on-site interaction
+            h = @mpoham sum(u[range_int]*nn{i,i+(range_int-1)} for i in vertices(InfiniteChain(T)))
             H += h
         end
         for range_exc in 1:D_exc
@@ -1260,7 +1260,7 @@ function density_state(ψ₀::InfiniteMPS,P::Int64,Q::Int64,spin::Bool)
     check = (sum(Nₑ)/(T*Bands) ≈ P/Q)
     println("Filling is conserved: $check")
 
-    return N_av
+    return Nₑ
 end
 
 # For Hubbard models involving a chemical potential
