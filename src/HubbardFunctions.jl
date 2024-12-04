@@ -1075,14 +1075,21 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
 end
 
 """
-    produce_bandgap(model::Simulation; resolution::Int64=5, force::Bool=false)
+    produce_bandgap(model::Union{OB_Sim, MB_Sim}; resolution::Int64=5, force::Bool=false)
 
 Compute or load the band gap of the desired model.
 """
-function produce_bandgap(simul::Simulation; resolution::Int64=5, force::Bool=false)
+function produce_bandgap(simul::Union{OB_Sim, MB_Sim}; resolution::Int64=5, force::Bool=false)
     momenta = range(0, π, resolution)
-    Exc_hole = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,-1])
-    Exc_elec = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,1])
+    Q = simul.Q
+    spin::Bool = get(simul.kwargs, :spin, false)
+
+    if spin
+        error("Band gap for spin systems not implemented.")
+    end
+
+    Exc_hole = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,-Q])
+    Exc_elec = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,Q])
 
     E_hole = real(Exc_hole["Es"])
     E_elec = real(Exc_elec["Es"])
@@ -1331,7 +1338,11 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
     for i in 1:B
         for j in 1:B
             for r in 0:(range_t-1)
-                t[i,j+r*B] = tmn[site_0+r,i,j] - corr[1,site_0+r,i,j] - corr[2,site_0+r,i,j]
+                if isdefined(Main,:corr)
+                    t[i,j+r*B] = tmn[site_0+r,i,j] - corr[1,site_0+r,i,j] - corr[2,site_0+r,i,j]
+                else
+                    t[i,j+r*B] = tmn[site_0+r,i,j] - corr_G_HW[site_0+r,i,j] - corr_v_xc[site_0+r,i,j]
+                end
             end
             for r in 0:(range_u-1)
                 U[i,j+r*B] = Wmn[site_0,site_0,site_0+r,site_0+r,i,i,j,j]
