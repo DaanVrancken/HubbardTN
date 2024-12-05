@@ -360,13 +360,15 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     t = simul.t
     u = simul.u
     μ = simul.μ
-    J = simul.J
+    if hasproperty(simul, :J)
+        J = simul.J
+        D_exc = length(J)
+    end
     L = simul.period
     spin::Bool = get(simul.kwargs, :spin, false)
 
     D_hop = length(t)
     D_int = length(u)
-    D_exc = length(J)
     
     if hasproperty(simul, :P)
         P = simul.P
@@ -403,10 +405,12 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
             h = @mpoham sum(u[range_int]*nn{i,i+(range_int-1)} for i in vertices(InfiniteChain(T)))
             H += h
         end
-        for range_exc in 1:D_exc
-            h1 = @mpoham sum(J[range_exc]*J1{i,i+range_exc} for i in vertices(InfiniteChain(T)))
-            h2 = @mpoham sum(0.5*J[range_exc]*J2{i,i+range_exc} + 0.5*J[range_exc]*J2{i+range_exc,i} for i in vertices(InfiniteChain(T)))
-            H += h1 + h2
+        if hasproperty(simul, :J)
+            for range_exc in 1:D_exc
+                h1 = @mpoham sum(J[range_exc]*J1{i,i+range_exc} for i in vertices(InfiniteChain(T)))
+                h2 = @mpoham sum(0.5*J[range_exc]*J2{i,i+range_exc} + 0.5*J[range_exc]*J2{i+range_exc,i} for i in vertices(InfiniteChain(T)))
+                H += h1 + h2
+            end
         end
     elseif D_hop==1 && D_int==1
         h = @mpoham sum(-t[1]*twosite{i,i+1} -t[1]*twosite{i,i+L} for i in vertices(InfiniteChain(T)))
@@ -982,7 +986,11 @@ end
 function produce_groundstate(simul::Union{OB_Sim, OBC_Sim}; force::Bool=false)
     t = simul.t 
     u = simul.u
-    J = simul.J
+    if hasproperty(simul, :J)
+        J = simul.J
+    else
+        J = 0
+    end
     S_spin = "nospin_"
     spin::Bool = get(simul.kwargs, :spin, false)
     if spin
@@ -1001,7 +1009,7 @@ end
 
 function compute_excitations(simul::Simulation, momenta, nums::Int64; 
                                     charges::Vector{Float64}=[0,0.0,0], 
-                                    trunc_dim::Int64=0, trunc_scheme::Int64=0, 
+                                    trunc_dim::Int64=0, trunc_scheme::Int64=0, DW = false, shift=1,
                                     solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
     if trunc_dim<0
         return error("Trunc_dim should be a positive integer.")
@@ -1029,7 +1037,14 @@ function compute_excitations(simul::Simulation, momenta, nums::Int64;
         ψ = dict_trunc["ψ_trunc"]
         envs = dict_trunc["envs_trunc"]
     end
-    Es, qps = excitations(H, QuasiparticleAnsatz(solver), momenta./length(H), ψ, envs; num=nums, sector=sector)
+    if DW
+        ψ_s = circshift(ψ, shift)
+        envs_s = environments(ψ_s, H);
+        Es, qps = excitations(H, QuasiparticleAnsatz(solver), momenta./length(H), ψ, envs, ψ_s, envs_s; num=nums, sector=sector)
+    else
+        Es, qps = excitations(H, QuasiparticleAnsatz(solver), momenta./length(H), ψ, envs; num=nums, sector=sector)
+    end
+    
     return Dict("Es" => Es, "qps" => qps, "momenta" => momenta)
 end
 
@@ -1103,6 +1118,35 @@ function produce_bandgap(simul::Union{OB_Sim, MB_Sim}; resolution::Int64=5, forc
     end
 
     return gap, momenta[k]
+end
+
+function produce_domainwalls(simul::Simulation, momenta, nums::Int64; 
+                                    force::Bool=false, charges::Vector{Float64}=[0,0.0,1], 
+                                    trunc_dim::Int64=0, trunc_scheme::Int64=0, shift=1,
+                                    solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
+    spin::Bool = get(simul.kwargs, :spin, false)
+    S = ""
+    if typeof(momenta)==Float64
+        momenta_string = "_mom=$momenta"
+    else
+        momenta_string = "_mom=$(first(momenta))to$(last(momenta))div$(length(momenta))"
+    end
+    if hasproperty(simul, :Q)
+        if !spin
+            charge_string = "f$(Int(charges[1]))su$(charges[2])u$(Int(charges[3]))"
+        else
+            charge_string = "f$(Int(charges[1]))u$(charges[2])u$(Int(charges[3]))"
+            S = "spin_"
+        end
+    else
+        charge_string = "f$(Int(charges[1]))su$(charges[2])"
+    end
+
+    code = get(simul.kwargs, :code, "")
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="DWs_"*S*code*"_nums=$nums"*"charges="*charge_string*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
+        return compute_excitations(cfg, momenta, nums; charges=charges, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, DW=true, shift=shift, solver=solver)
+    end
+    return data
 end
 
 
