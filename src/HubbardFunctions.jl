@@ -680,7 +680,7 @@ function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
     Ind1 = []
     Ind2 = []
     Ind3 = []
-    for ((i,j,k,l), _) in Uijkk
+    for (i,j,k,l) in keys(Uijkk)
         if minimum((i,j,k,l)) > B
             error("At least one index in every tuple (i,j,k,l) has to be at site 0.")
         end
@@ -717,7 +717,7 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     J = simul.J
     U13 = simul.U13
     spin::Bool = get(simul.kwargs, :spin, false)
-    U112 = get(simul.kwargs, :U112, nothing)
+    U112 = get(simul.kwargs, :U112, Dict{Tuple{Int, Int, Int, Int}, Float64}())
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
@@ -794,7 +794,7 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
         end
     end
 
-    if !isnothing(U112)
+    if !isempty(U112)
         H_total += Uijkk(U::Dict{NTuple{4, Int64}, Float64},Bands,T,cdc)
     end
 
@@ -1414,7 +1414,7 @@ end
 
 Extract the parameters from a params.jl file located at path in PyFoldHub format.
 """
-function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, r_1111 = 1, r_112 = 1)
+function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, r_1111::Int64 = 1, r_112::Int64 = 1)
     include(path)
 
     B = size(Wmn)[5]
@@ -1477,6 +1477,7 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
             mod_j = mod(j-1,B) + 1; r_j = (j - 1) ÷ B;
             mod_k = mod(k-1,B) + 1; r_k = (k - 1) ÷ B;
             mod_l = mod(l-1,B) + 1; r_l = (l - 1) ÷ B;
+            # change index order to those of operators
             U1111[(i,k,l,j)] = Wmn[site_0+r_i,site_0+r_j,site_0+r_k,site_0+r_l,mod_i,mod_j,mod_k,mod_l]
         end
     end
