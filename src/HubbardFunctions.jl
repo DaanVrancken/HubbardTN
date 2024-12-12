@@ -1414,7 +1414,7 @@ end
 
 Extract the parameters from a params.jl file located at path in PyFoldHub format.
 """
-function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2; range_J::Int64=1, r_1111 = 1, r_112 = 1)
+function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, r_1111 = 1, r_112 = 1)
     include(path)
 
     B = size(Wmn)[5]
