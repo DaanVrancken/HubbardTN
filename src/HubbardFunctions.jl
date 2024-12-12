@@ -641,13 +641,15 @@ function Exchange2_IS(J,range,T,cdc)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
     
-    return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J[bi,bf]*C4{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
+    # J transposed because J1[i,j] = J2[j,i] for IS
+    return @mpoham sum(0.5*J'[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J'[bi,bf]*C4{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
 end;
 
 function Exchange_IS(J,range,T,cdc)
     return Exchange1_IS(J,range,T,cdc) + Exchange2_IS(J,range,T,cdc)
 end;
 
+# Four different matrices required: two for U13 and two for U31
 function Uijjj_IS(U,range,T,cdc)
     Bands,Bands2 = size(U)
     
@@ -671,12 +673,51 @@ function Uijjj_IS(U,range,T,cdc)
     return H
 end;
 
+function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
+    # input is dict with permutations i,j,k,l (in order Cdi Cdj Ck Cl, NOT Uijkl). Indices range over i,j,k,l = 1,...,r*B
+    # At least one index in every tuple (i,j,k,l) has to be at site 0
+
+    Ind1 = []
+    Ind2 = []
+    Ind3 = []
+    for ((i,j,k,l), u) in Uijkk
+        if minimum((i,j,k,l)) > B
+            error("At least one index in every tuple (i,j,k,l) has to be at site 0.")
+        end
+        for site in 1:T
+            if k==l
+                push!(Ind1,(site,i,j,k,l))
+            elseif j==k
+                push!(Ind2,(site,i,j,k,l))
+            elseif j==l
+                push!(Ind3,(site,i,j,k,l))
+            end
+        end
+    end
+
+    @tensor C1[-1 -2 -3; -4 -5 -6] := cdc[-1 2; -4 -6] * cdc[-2 -3; -5 2]
+    @tensor C2[-1 -2 -3; -4 -5 -6] := cdc[-1 -3; -4 -6] * cdc[-2 2; 2 -5]
+    @tensor C3[-1 -2 -3; -4 -5 -6] := cdc[-1 2; -4 -5] * cdc[-2 -3; 2 -6]
+    C1 = C1 + C1'
+    C2 = C2 + C2'
+    C3 = C3 + C3'
+
+    Lattice = InfiniteStrip(B,T*B)
+    
+    H = @mpoham sum(0.5*U[(i,j,k,l)]*C1{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B),site+(k-1)÷B]} for (site,i,j,k,l) in Ind1)
+    H += @mpoham sum(U[(i,j,k,l)]*C2{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(l-1,B),site+(l-1)÷B]} for (site,i,j,k,l) in Ind2)
+    H += @mpoham sum(0.5*U[(i,j,k,l)]*C3{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B),site+(k-1)÷B]} for (site,i,j,k,l) in Ind3)
+
+    return H
+end;
+
 function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     t = simul.t
     u = simul.u
     J = simul.J
     U13 = simul.U13
     spin::Bool = get(simul.kwargs, :spin, false)
+    U112 = get(simul.kwargs, :U112, nothing)
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
@@ -751,6 +792,10 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
                 H_total += f(M,i,T,o)
             end
         end
+    end
+
+    if !isnothing(U112)
+        H_total += Uijkk(U::Dict{NTuple{4, Int64}, Float64},Bands,T,cdc)
     end
 
     return H_total
@@ -1369,7 +1414,7 @@ end
 
 Extract the parameters from a params.jl file located at path in PyFoldHub format.
 """
-function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
+function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2; range_J::Int64=1, r_1111 = 1, r_112 = 1)
     include(path)
 
     B = size(Wmn)[5]
@@ -1377,7 +1422,7 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
 
     t = zeros(B,B*range_t)
     U = zeros(B,B*range_u)
-    J = zeros(B,B)
+    J = zeros(B,B*range_u)
     U13 = zeros(B,B)
     for i in 1:B
         for j in 1:B
@@ -1391,11 +1436,15 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
             for r in 0:(range_u-1)
                 U[i,j+r*B] = Wmn[site_0,site_0,site_0+r,site_0+r,i,i,j,j]
             end
-            if i != j
-                J[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,i]
-                if !(J[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,i,j,i,j])
-                    error("J1 is not equal to J2")
+            for r in 0:(range_J-1)
+                if r!=0 || i!=j
+                    J[i,j+r*B] = Wmn[site_0,site_0+r,site_0+r,site_0,i,j,j,i]
+                    if !(J[i,j+r*B] ≈ Wmn[site_0,site_0+r,site_0,site_0+r,j,i,j,i])
+                        error("J1 is not equal to J2")
+                    end
                 end
+            end
+            if i != j
                 U13[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,j]
                 if !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,i,j,j]) || !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,i,j]) || 
                     !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,j,i])
@@ -1409,7 +1458,30 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
     mu = minimum(diag(t[:,1:B]))
     t[:,1:B] -= mu.*I
 
-    return t, U, J, U13
+    U112 = Dict{Tuple{Int, Int, Int, Int}, Float64}()
+    for i in 1:r_112*B, j in 1:r_112*B, k in 1:r_112*B, l in 1:r_112*B
+        if (i == j || i == k || i == l || j == k || j == l || k == l) && length(unique((i, j, k, l))) == 3 && minimum((i,j,k,l)) <= B
+            mod_i = mod(i-1,B) + 1; r_i = (i - 1) ÷ B;
+            mod_j = mod(j-1,B) + 1; r_j = (j - 1) ÷ B;
+            mod_k = mod(k-1,B) + 1; r_k = (k - 1) ÷ B;
+            mod_l = mod(l-1,B) + 1; r_l = (l - 1) ÷ B;
+            # change index order to those of operators
+            U112[(i,k,l,j)] = Wmn[site_0+r_i,site_0+r_j,site_0+r_k,site_0+r_l,mod_i,mod_j,mod_k,mod_l]
+        end
+    end
+
+    U1111 = Dict{Tuple{Int, Int, Int, Int}, Float64}()
+    for i in 1:r_1111*B, j in 1:r_1111*B, k in 1:r_1111*B, l in 1:r_1111*B
+        if length(unique((i, j, k, l))) == 4 && minimum((i,j,k,l)) <= B
+            mod_i = mod(i-1,B) + 1; r_i = (i - 1) ÷ B;
+            mod_j = mod(j-1,B) + 1; r_j = (j - 1) ÷ B;
+            mod_k = mod(k-1,B) + 1; r_k = (k - 1) ÷ B;
+            mod_l = mod(l-1,B) + 1; r_l = (l - 1) ÷ B;
+            U1111[(i,k,l,j)] = Wmn[site_0+r_i,site_0+r_j,site_0+r_k,site_0+r_l,mod_i,mod_j,mod_k,mod_l]
+        end
+    end
+
+    return t, U, J, U13, U112, U1111
 end
 
         
