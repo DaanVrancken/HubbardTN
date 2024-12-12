@@ -680,7 +680,7 @@ function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
     Ind1 = []
     Ind2 = []
     Ind3 = []
-    for ((i,j,k,l), u) in Uijkk
+    for ((i,j,k,l), _) in Uijkk
         if minimum((i,j,k,l)) > B
             error("At least one index in every tuple (i,j,k,l) has to be at site 0.")
         end
