@@ -680,9 +680,11 @@ function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
     Ind1 = []
     Ind2 = []
     Ind3 = []
-    for (i,j,k,l) in keys(Uijkk)
+    for (i,j,k,l) in keys(U)
         if minimum((i,j,k,l)) > B
             error("At least one index in every tuple (i,j,k,l) has to be at site 0.")
+        elseif length(unique((i, j, k, l))) != 3
+            error("Two indices should be the same. Not more, not less.")
         end
         for site in 1:T
             if k==l
@@ -704,20 +706,32 @@ function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
 
     Lattice = InfiniteStrip(B,T*B)
     
-    H = @mpoham sum(0.5*U[(i,j,k,l)]*C1{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B),site+(k-1)÷B]} for (site,i,j,k,l) in Ind1)
-    H += @mpoham sum(U[(i,j,k,l)]*C2{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(l-1,B),site+(l-1)÷B]} for (site,i,j,k,l) in Ind2)
-    H += @mpoham sum(0.5*U[(i,j,k,l)]*C3{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B),site+(k-1)÷B]} for (site,i,j,k,l) in Ind3)
+    H = 0
+    if !isempty(Ind1)
+        H += @mpoham sum(0.5*U[(i,j,k,l)]*C1{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B)+1,site+(k-1)÷B]} for (site,i,j,k,l) in Ind1)
+    end
+    if !isempty(Ind2)
+        H += @mpoham sum(U[(i,j,k,l)]*C2{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(l-1,B)+1,site+(l-1)÷B]} for (site,i,j,k,l) in Ind2)
+    end
+    if !isempty(Ind3)
+        H += @mpoham sum(0.5*U[(i,j,k,l)]*C3{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B)+1,site+(k-1)÷B]} for (site,i,j,k,l) in Ind3)
+    end
 
     return H
 end;
+
+function Uijkl(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
+    error("Not yet implemented.")
+end
 
 function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     t = simul.t
     u = simul.u
     J = simul.J
     U13 = simul.U13
+    U112::Dict{NTuple{4, Int64}, Float64} = get(simul.kwargs, :U112, Dict{Tuple{Int, Int, Int, Int}, Float64}())
+    U1111::Dict{NTuple{4, Int64}, Float64} = get(simul.kwargs, :U1111, Dict{Tuple{Int, Int, Int, Int}, Float64}())
     spin::Bool = get(simul.kwargs, :spin, false)
-    U112 = get(simul.kwargs, :U112, Dict{Tuple{Int, Int, Int, Int}, Float64}())
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
@@ -795,7 +809,11 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     end
 
     if !isempty(U112)
-        H_total += Uijkk(U::Dict{NTuple{4, Int64}, Float64},Bands,T,cdc)
+        H_total += Uijkk(U112::Dict{NTuple{4, Int64}, Float64},Bands,T,cdc)
+    end
+
+    if !isempty(U1111)
+        H_total += Uijkl(U1111::Dict{NTuple{4, Int64}, Float64},Bands,T,cdc)
     end
 
     return H_total
