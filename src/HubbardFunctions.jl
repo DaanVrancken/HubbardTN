@@ -721,7 +721,33 @@ function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
 end;
 
 function Uijkl(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
-    error("Not yet implemented.")
+    # input is dict with permutations i,j,k,l (in order Cdi Cdj Ck Cl, NOT Uijkl). Indices range over i,j,k,l = 1,...,r*B
+    # At least one index in every tuple (i,j,k,l) has to be at site 0
+
+    Ind = []
+    for (i,j,k,l) in keys(U)
+        if minimum((i,j,k,l)) > B
+            error("At least one index in every tuple (i,j,k,l) has to be at site 0.")
+        elseif length(unique((i, j, k, l))) != 4
+            error("All indices must be different.")
+        elseif U[(i,j,k,l)] != U[(l,k,j,i)]
+            @warn("U1111 is not Hermitian.")
+        end
+        for site in 1:T
+            push!(Ind,(site,i,j,k,l))
+        end
+    end
+
+    @tensor C[-1 -2 -3 -4; -5 -6 -7 -8] := cdc[-1 -2; -5 -6] * cdc[-3 -4; -7 -8]
+
+    Lattice = InfiniteStrip(B,T*B)
+
+    H = 0
+    if !isempty(Ind)
+        H += @mpoham sum(0.5*U[(i,j,k,l)]*C{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(l-1,B)+1,site+(l-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B,],Lattice[mod(k-1,B)+1,site+(k-1)÷B]} for (site,i,j,k,l) in Ind)
+    end
+
+    return H
 end
 
 function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
@@ -1440,7 +1466,7 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
 
     t = zeros(B,B*range_t)
     U = zeros(B,B*range_u)
-    J = zeros(B,B*range_u)
+    J = zeros(B,B*range_J)
     U13 = zeros(B,B)
     for i in 1:B
         for j in 1:B
