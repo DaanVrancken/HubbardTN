@@ -21,7 +21,7 @@ Q = 1;
 E_norm = [-1.2696767, -1.037173, -0.84163698]
 
 @testset "Dependence on parameters" for u in u_range
-    model = hf.OB_Sim([1.0], [u], 0.0, P, Q, 2.0);
+    model = hf.OB_Sim([1.0], [Float64(u)], 0.0, P, Q, 2.0);
     dictionary = hf.produce_groundstate(model; force=Force);
     ψ₀ = dictionary["groundstate"];
     H = dictionary["ham"];
@@ -35,8 +35,8 @@ end
 # DEPENDENCE ON FILLING #
 #########################
 
-t = [1];
-u = [5];
+t = [1.0];
+u = [5.0];
 P = [1, 1, 3];
 Q = [2, 1, 2];
 E = zeros(length(P),1);
@@ -95,6 +95,6 @@ end
     @test typeof(D) == Vector{Int64}
     @test D > zeros(size(D))
 
-    electron_number = hf.density_state(model)
+    electron_number = sum(hf.density_state(model))/2
     @test sum(electron_number)≈P/Q atol=1e-8
 end

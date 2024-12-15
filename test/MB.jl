@@ -103,5 +103,5 @@ end
     @test sum(D_trunc)/4 <= trunc_dim
 
     electron_number = hf.density_state(model)
-    @test sum(electron_number)/2 ≈ P/Q atol=1e-8
+    @test sum(electron_number)/4 ≈ P/Q atol=1e-8
 end

@@ -1468,9 +1468,10 @@ function plot_spin(model::Simulation; title="Spin Density", l_margin=[15mm 0mm])
 end
 
 """
-    extract_params(path::String; range_u::Int64= 1, range_t::Int64=2)
+    extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, 
+                        range_U13::Int64=1, r_1111::Int64 = 1, r_112::Int64 = 1)
 
-Extract the parameters from a params.jl file located at path in PyFoldHub format.
+Extract the parameters from a params.jl file located at `path` in PyFoldHub format.
 """
 function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, 
                         range_U13::Int64=1, r_1111::Int64 = 1, r_112::Int64 = 1)
@@ -1508,16 +1509,14 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
                     end
                 end
             end
-            for r in 0:(range_U13-1)
-                if r!=0 || i!=j
-                    U13_IS[i,j+r*B,1] = Wmn[site_0,site_0+r,site_0+r,site_0+r,i,j,j,j]
-                    U13_IS[i,j+r*B,2] = Wmn[site_0+r,site_0+r,site_0,site_0+r,j,j,i,j]
-                    U13_IS[i,j+r*B,3] = Wmn[site_0+r,site_0,site_0,site_0,j,i,i,i]
-                    U13_IS[i,j+r*B,4] = Wmn[site_0,site_0,site_0+r,site_0,i,i,j,i]
-                    if !(U13_IS[i,j+r*B,1] ≈ Wmn[site_0+r,site_0,site_0,site_0+r,j,i,j,j]) || !(U13_IS[i,j+r*B,2] ≈ Wmn[site_0+r,site_0+r,site_0+r,site_0,j,j,j,i]) ||
-                        !(U13_IS[i,j+r*B,3] ≈ Wmn[site_0,site_0+r,site_0,site_0,i,j,i,i]) || !(U13_IS[i,j+r*B,4] ≈ Wmn[site_0,site_0,site_0,site_0+r,i,i,i,j])
-                        error("U13_IS not consistent.")
-                    end
+            for r in 1:(range_U13-1)
+                U13_IS[i,j+(r-1)*B,1] = Wmn[site_0,site_0+r,site_0+r,site_0+r,i,j,j,j]
+                U13_IS[i,j+(r-1)*B,2] = Wmn[site_0+r,site_0+r,site_0,site_0+r,j,j,i,j]
+                U13_IS[i,j+(r-1)*B,3] = Wmn[site_0+r,site_0,site_0,site_0,j,i,i,i]
+                U13_IS[i,j+(r-1)*B,4] = Wmn[site_0,site_0,site_0+r,site_0,i,i,j,i]
+                if !(U13_IS[i,j+(r-1)*B,1] ≈ Wmn[site_0+r,site_0,site_0+r,site_0+r,j,i,j,j]) || !(U13_IS[i,j+(r-1)*B,2] ≈ Wmn[site_0+r,site_0+r,site_0+r,site_0,j,j,j,i]) ||
+                    !(U13_IS[i,j+(r-1)*B,3] ≈ Wmn[site_0,site_0+r,site_0,site_0,i,j,i,i]) || !(U13_IS[i,j+(r-1)*B,4] ≈ Wmn[site_0,site_0,site_0,site_0+r,i,i,i,j])
+                    error("U13_IS not consistent.")
                 end
             end
             if i != j
