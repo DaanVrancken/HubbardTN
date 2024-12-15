@@ -91,12 +91,14 @@ Construct a parameter set for a 1D B-band Hubbard model with a fixed number of p
 - `t`: Bx(nB) matrix in which element ``(i,j)`` is the hopping parameter from band ``i`` to band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... hopping matrices are concatenated horizontally.
 - `u`: Bx(nB) matrix in which element ``(i,j)`` is the Coulomb repulsion ``U_{ij}=U_{iijj}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally.
 - `J`: Bx(nB) matrix in which element ``(i,j)`` is the exchange ``J_{ij}=U_{ijji}=U_{ijij}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored.
-- `U13`: Bx(nB) matrix in which element ``(i,j)`` is the parameter ``U_{ijjj}=U_{jijj}=U_{jjij}=U_{jjji}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored. This argument is optional.
+- `U13`: BxB matrix in which element ``(i,j)`` is the parameter ``U_{ijjj}=U_{jijj}=U_{jjij}=U_{jjji}`` between band ``i`` and band ``j``. Only on-site. The diagonal terms of the on-site matrix are ignored. This argument is optional.
 - `P`,`Q`: The ratio `P`/`Q` defines the number of electrons per site, which should be larger than 0 and smaller than 2.
 - `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
 - `bond_dim`: The maximal bond dimension used to initialize the state.
 
 Put the optional argument 'spin=true' to perform spin-dependent calculations. 
+
+U13 inter-site, Uijkk, and Uijkl can be inserted using kwargs.
 
 Use the optional argument `name` to assign a name to the model. 
 This is used to destinguish between different parameter sets: Wrong results could be loaded or overwritten if not used consistently!!!
@@ -187,11 +189,13 @@ Construct a parameter set for a 1D ``B``-band Hubbard model with the number of p
 - `t`: ``B\\times nB`` matrix in which element ``(i,j)`` is the hopping parameter from band ``i`` to band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... hopping matrices are concatenated horizontally. The diagonal terms of the on-site matrix determine the filling.
 - `u`: ``B\\times nB`` matrix in which element ``(i,j)`` is the Coulomb repulsion ``U_{ij}=U_{iijj}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally.
 - `J`: ``B\\times nB`` matrix in which element ``(i,j)`` is the exchange ``J_{ij}=U_{ijji}=U_{ijij}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored.
-- `U13`: ``B\\times nB`` matrix in which element ``(i,j)`` is the parameter ``U_{ijjj}=U_{jijj}=U_{jjij}=U_{jjji}`` between band ``i`` and band ``j``. The on-site, nearest neighbour, next-to-nearest neighbour... matrices are concatenated horizontally. The diagonal terms of the on-site matrix are ignored. This argument is optional.
+- `U13`: ``B\\times B`` matrix in which element ``(i,j)`` is the parameter ``U_{ijjj}=U_{jijj}=U_{jjij}=U_{jjji}`` between band ``i`` and band ``j``. Only on-site. The diagonal terms of the on-site matrix are ignored. This argument is optional.
 - `svalue`: The Schmidt truncation value, used to truncate in the iDMRG2 algorithm for the computation of the groundstate.
 - `bond_dim`: The maximal bond dimension used to initialize the state.
 
-Spin-dependent calculations are not yet implemented. 
+Spin-dependent calculations are not yet implemented.
+
+U13 inter-site, Uijkk, and Uijkl can be inserted using kwargs.
 
 Use the optional argument `name` to assign a name to the model. 
 This is used to destinguish between different parameter sets: Wrong results could be loaded or overwritten if not used consistently!!!
@@ -433,7 +437,7 @@ function OS_Hopping(t,T,cdc)
     end
     for i in 1:Bands
         for j in (i+1):Bands
-            if t[i,j] ≠ t'[i,j]
+            if !(t[i,j] ≈ t'[i,j])
                 @warn "t_OS is not Hermitian."
             end
         end
@@ -651,24 +655,28 @@ end;
 
 # Four different matrices required: two for U13 and two for U31
 function Uijjj_IS(U,range,T,cdc)
-    Bands,Bands2 = size(U)
+    Bands,Bands2,num = size(U)
     
-    if Bands ≠ Bands2 || typeof(U) ≠ Matrix{Float64}
+    if Bands ≠ Bands2
         @warn "U13_IS is not a float square matrix"
+    elseif num != 4
+        error("U13_IS shoud be a BxBx4 array.")
     end
     
     @tensor C1[-1 -2; -3 -4] := cdc[-1 2; -3 -4] * cdc[-2 3; 3 2]
-    @tensor C2[-1 -2; -3 -4] := cdc[-2 -1; 3 -3] * cdc[3 2; 2 -4]
-    @tensor C3[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
-    @tensor C4[-1 -2; -3 -4] := cdc[1 -1; 3 -3] * cdc[-2 3; 1 -4]
+    #@tensor C2[-1 -2; -3 -4] := cdc[-2 -1; 3 -3] * cdc[3 2; 2 -4]
+    @tensor C2[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
+    #@tensor C4[-1 -2; -3 -4] := cdc[1 -1; 3 -3] * cdc[-2 3; 1 -4]
+
+    C1 = C1 + C1'
+    C2 = C2 + C2'
+
     Lattice = InfiniteStrip(Bands,T*Bands)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
     
-    H = @mpoham sum(0.5*U[bi,bf]*C1{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bi,bf]*C1{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
-    for C in [C2, C3, C4]
-        H += @mpoham sum(0.5*U[bi,bf]*C{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bi,bf]*C{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices)
-    end
+    H = @mpoham sum(0.5*U[bi,bf,1]*C1{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bf,bi,2]*C1{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
+    H += @mpoham sum(0.5*U[bi,bf,3]*C2{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bf,bi,4]*C2{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices)
 
     return H
 end;
@@ -730,7 +738,7 @@ function Uijkl(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
             error("At least one index in every tuple (i,j,k,l) has to be at site 0.")
         elseif length(unique((i, j, k, l))) != 4
             error("All indices must be different.")
-        elseif U[(i,j,k,l)] != U[(l,k,j,i)]
+        elseif !(U[(i,j,k,l)] ≈ U[(l,k,j,i)])
             @warn("U1111 is not Hermitian.")
         end
         for site in 1:T
@@ -754,16 +762,17 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     t = simul.t
     u = simul.u
     J = simul.J
-    U13 = simul.U13
+    U13_OS = simul.U13
     U112::Dict{NTuple{4, Int64}, Float64} = get(simul.kwargs, :U112, Dict{Tuple{Int, Int, Int, Int}, Float64}())
     U1111::Dict{NTuple{4, Int64}, Float64} = get(simul.kwargs, :U1111, Dict{Tuple{Int, Int, Int, Int}, Float64}())
     spin::Bool = get(simul.kwargs, :spin, false)
 
     Bands,width_t = size(t)
     Bands1,width_u = size(u)
-    Bands2, width_J = size(J)
-    Bands3, width_U13 = size(U13)
-    if !(Bands == Bands1 == Bands2 == Bands3)
+    Bands2,width_J = size(J)
+    Bands3,_ = size(U13_OS)
+    U13_IS::Array{Float64, 3} = get(simul.kwargs, :U13_IS, zeros(Bands,Bands,4))
+    if !(Bands == Bands1 == Bands2 == Bands3 == size(U13_IS)[1])
         return error("Number of bands is incosistent.")
     end
 
@@ -788,7 +797,7 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     Range_t = Int((width_t-Bands)/Bands)
     Range_u = Int((width_u-Bands)/Bands)
     Range_J = Int((width_J-Bands)/Bands)
-    Range_U13 = Int((width_U13-Bands)/Bands)
+    Range_U13 = Int((size(U13_IS)[2])/Bands)
 
     # Define matrices
     u_OB = zeros(Bands)
@@ -808,7 +817,6 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
         u_OS[i,i] = 0.0
     end
     J_OS = J[:,1:Bands]
-    U13_OS = U13[:,1:Bands]
 
     # Implement Hamiltonian OB
     H_total = OB_interaction(u_OB,T,OSI)
@@ -825,10 +833,16 @@ function hamiltonian(simul::Union{MB_Sim, MBC_Sim})
     end
 
     # Implement Hamiltonian IS
-    for (m,range,o,f) in [(t,Range_t,cdc,IS_Hopping),(u,Range_u,n,Direct_IS),(J,Range_J,cdc,Exchange_IS),(U13,Range_U13,cdc,Uijjj_IS)]
+    for (m,range,o,f) in [(t,Range_t,cdc,IS_Hopping),(u,Range_u,n,Direct_IS),(J,Range_J,cdc,Exchange_IS),(U13_IS,Range_U13,cdc,Uijjj_IS)]
         for i in 1:range
-            M = m[:,(Bands*i+1):(Bands*(i+1))]
-            if M != zeros(Bands,Bands)
+            if m != U13_IS
+                M = m[:,(Bands*i+1):(Bands*(i+1))]
+                ZERO = zeros(Bands,Bands)
+            else
+                M = m[:,(Bands*(i-1)+1):(Bands*i),:]
+                ZERO = zeros(Bands,Bands,4)
+            end
+            if M != ZERO
                 H_total += f(M,i,T,o)
             end
         end
@@ -1458,7 +1472,8 @@ end
 
 Extract the parameters from a params.jl file located at path in PyFoldHub format.
 """
-function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, r_1111::Int64 = 1, r_112::Int64 = 1)
+function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, 
+                        range_U13::Int64=1, r_1111::Int64 = 1, r_112::Int64 = 1)
     include(path)
 
     B = size(Wmn)[5]
@@ -1467,7 +1482,12 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
     t = zeros(B,B*range_t)
     U = zeros(B,B*range_u)
     J = zeros(B,B*range_J)
-    U13 = zeros(B,B)
+    U13_OS = zeros(B,B)
+    if range_U13 == 1
+        U13_IS = zeros(B,B*range_U13,4)
+    else
+        U13_IS = zeros(B,B*(range_U13-1),4)
+    end
     for i in 1:B
         for j in 1:B
             for r in 0:(range_t-1)
@@ -1484,15 +1504,27 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
                 if r!=0 || i!=j
                     J[i,j+r*B] = Wmn[site_0,site_0+r,site_0+r,site_0,i,j,j,i]
                     if !(J[i,j+r*B] ≈ Wmn[site_0,site_0+r,site_0,site_0+r,j,i,j,i])
-                        error("J1 is not equal to J2")
+                        error("J1 is not equal to J2.")
+                    end
+                end
+            end
+            for r in 0:(range_U13-1)
+                if r!=0 || i!=j
+                    U13_IS[i,j+r*B,1] = Wmn[site_0,site_0+r,site_0+r,site_0+r,i,j,j,j]
+                    U13_IS[i,j+r*B,2] = Wmn[site_0+r,site_0+r,site_0,site_0+r,j,j,i,j]
+                    U13_IS[i,j+r*B,3] = Wmn[site_0+r,site_0,site_0,site_0,j,i,i,i]
+                    U13_IS[i,j+r*B,4] = Wmn[site_0,site_0,site_0+r,site_0,i,i,j,i]
+                    if !(U13_IS[i,j+r*B,1] ≈ Wmn[site_0+r,site_0,site_0,site_0+r,j,i,j,j]) || !(U13_IS[i,j+r*B,2] ≈ Wmn[site_0+r,site_0+r,site_0+r,site_0,j,j,j,i]) ||
+                        !(U13_IS[i,j+r*B,3] ≈ Wmn[site_0,site_0+r,site_0,site_0,i,j,i,i]) || !(U13_IS[i,j+r*B,4] ≈ Wmn[site_0,site_0,site_0,site_0+r,i,i,i,j])
+                        error("U13_IS not consistent.")
                     end
                 end
             end
             if i != j
-                U13[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,j]
-                if !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,i,j,j]) || !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,i,j]) || 
-                    !(U13[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,j,i])
-                    error("U13 not consistent")
+                U13_OS[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,j]
+                if !(U13_OS[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,i,j,j]) || !(U13_OS[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,i,j]) || 
+                    !(U13_OS[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,j,i])
+                    error("U13_OS not consistent.")
                 end
             end
         end
@@ -1526,7 +1558,7 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
         end
     end
 
-    return t, U, J, U13, U112, U1111
+    return t, U, J, U13_OS, U13_IS, U112, U1111
 end
 
         
