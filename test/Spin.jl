@@ -77,7 +77,7 @@ end
     N1 = hf.density_state(model1)
     Nup1, Ndown1 = hf.density_spin(model1)
 
-    @test sum(N1) ≈ sum(Nup1 + Ndown1)/length(dictionary1["ham"])
+    @test sum(N1)/2 ≈ sum(Nup1 + Ndown1)/length(dictionary1["ham"])
 
     N2 = hf.density_state(model2)
     Nup2, Ndown2 = hf.density_spin(model2)

@@ -14,6 +14,7 @@ using DrWatson
 using Plots, StatsPlots
 using Plots.PlotMeasures
 using TensorOperations
+using JLD2
 using Revise
 
 function __init__()
@@ -370,9 +371,11 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     end
     L = simul.period
     spin::Bool = get(simul.kwargs, :spin, false)
+    U13::Vector{Float64} = get(simul.kwargs, :U13, [0.0])
 
     D_hop = length(t)
     D_int = length(u)
+    D_U13 = length(U13)
     
     if hasproperty(simul, :P)
         P = simul.P
@@ -398,6 +401,11 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     @planar nn[-1 -2; -3 -4] := n[-1; -3] * n[-2; -4]
     @tensor J1[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[-2 3; 2 -3]
     @tensor J2[-1 -2; -3 -4] := cdc[-1 2; 3 -4] * cdc[3 -2; -3 2]
+    @tensor C1[-1 -2; -3 -4] := cdc[-1 2; -3 -4] * cdc[-2 3; 3 2]
+    @tensor C2[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
+
+    C1 = C1 + C1'
+    C2 = C2 + C2'
     
     H = @mpoham sum(onesite{i} for i in vertices(InfiniteChain(T)))
     if L == 0
@@ -414,6 +422,13 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
                 h1 = @mpoham sum(J[range_exc]*J1{i,i+range_exc} for i in vertices(InfiniteChain(T)))
                 h2 = @mpoham sum(0.5*J[range_exc]*J2{i,i+range_exc} + 0.5*J[range_exc]*J2{i+range_exc,i} for i in vertices(InfiniteChain(T)))
                 H += h1 + h2
+            end
+        end
+        if U13 != [0.0]
+            for range_U13 in 1:D_U13
+                h3 = @mpoham sum(0.5*U13[range_U13]*C1{i,i+range_U13} + 0.5*U13[range_U13]*C2{i,i+range_U13} for i in vertices(InfiniteChain(T)))
+                h4 = @mpoham sum(0.5*U13[range_U13]*C1{i+range_U13,i} + 0.5*U13[range_U13]*C2{i+range_U13,i} for i in vertices(InfiniteChain(T)))
+                H += h3 + h4
             end
         end
     elseif D_hop==1 && D_int==1
@@ -585,18 +600,20 @@ function Uijjj_OS(U,T,cdc)
     end
     
     @tensor C1[-1 -2; -3 -4] := cdc[-1 2; -3 -4] * cdc[-2 3; 3 2]
-    @tensor C2[-1 -2; -3 -4] := cdc[-2 -1; 3 -3] * cdc[3 2; 2 -4]
-    @tensor C3[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
-    @tensor C4[-1 -2; -3 -4] := cdc[1 -1; 3 -3] * cdc[-2 3; 1 -4]
+    #@tensor C2[-1 -2; -3 -4] := cdc[-2 -1; 3 -3] * cdc[3 2; 2 -4]
+    @tensor C2[-1 -2; -3 -4] := cdc[-1 2; -3 4] * cdc[-2 4; 2 -4]
+    #@tensor C4[-1 -2; -3 -4] := cdc[1 -1; 3 -3] * cdc[-2 3; 1 -4]
+
+    C1 = C1 + C1'
+    C2 = C2 + C2'
+
     Lattice = InfiniteStrip(Bands,T*Bands)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) 
                for l in 1:(T*Bands^2) if div((l-1)%(Bands^2),Bands)+1 ≠ mod(l-1,Bands)+1]
     
     H = @mpoham sum(0.5*U[bi,bf]*C1{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
-    for C in [C2, C3, C4]
-        H += @mpoham sum(0.5*U[bi,bf]*C{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
-    end
+    H += @mpoham sum(0.5*U[bi,bf]*C2{Lattice[bi,site],Lattice[bf,site]} for (site,bi,bf) in Indices)
 
     return H
 end;
@@ -645,8 +662,7 @@ function Exchange2_IS(J,range,T,cdc)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
     
-    # J transposed because J1[i,j] = J2[j,i] for IS
-    return @mpoham sum(0.5*J'[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J'[bi,bf]*C4{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
+    return @mpoham sum(0.5*J[bi,bf]*C4{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*J[bi,bf]*C4{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
 end;
 
 function Exchange_IS(J,range,T,cdc)
@@ -660,6 +676,8 @@ function Uijjj_IS(U,range,T,cdc)
     if Bands ≠ Bands2
         @warn "U13_IS is not a float square matrix"
     elseif num != 4
+        # i = orbital 1 on site 0, j = orbital 2 on site "range"
+        # index 1: Uijjj=Ujjji, index 2: Ujiii=Uiiij, index 3: Ujijj=Ujjij, index 4: Uijii=Uiiji
         error("U13_IS shoud be a BxBx4 array.")
     end
     
@@ -675,8 +693,8 @@ function Uijjj_IS(U,range,T,cdc)
     
     Indices = [(div(l-1,Bands^2)+1, div((l-1)%(Bands^2),Bands)+1, mod(l-1,Bands)+1) for l in 1:(T*Bands^2)]
     
-    H = @mpoham sum(0.5*U[bi,bf,1]*C1{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bf,bi,2]*C1{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
-    H += @mpoham sum(0.5*U[bi,bf,3]*C2{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bf,bi,4]*C2{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices)
+    H = @mpoham sum(0.5*U[bi,bf,1]*C1{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bi,bf,3]*C1{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices) #operator has direction
+    H += @mpoham sum(0.5*U[bi,bf,2]*C2{Lattice[bi,site],Lattice[bf,site+range]} + 0.5*U[bi,bf,4]*C2{Lattice[bf,site+range],Lattice[bi,site]} for (site,bi,bf) in Indices)
 
     return H
 end;
@@ -939,13 +957,18 @@ function initialize_mps(operator, max_dimension::Int64)
     return InfiniteMPS(Ps, V_trunc)
 end
 
-function compute_groundstate(simul::Union{OB_Sim, MB_Sim, OBC_Sim2, MBC_Sim}; tol::Float64=1e-6, verbosity::Int64=0, maxiter::Int64=1000)
+function compute_groundstate(simul::Union{OB_Sim, MB_Sim, OBC_Sim2, MBC_Sim}; tol::Float64=1e-6, verbosity::Int64=0, maxiter::Int64=1000, init_state=nothing)
     H = hamiltonian(simul)
     spin::Bool = get(simul.kwargs, :spin, false)
-    if hasproperty(simul, :P)
-        ψ₀ = initialize_mps(H,simul.P,simul.bond_dim,spin)
+
+    if isnothing(init_state)
+        if hasproperty(simul, :P)
+            ψ₀ = initialize_mps(H,simul.P,simul.bond_dim,spin)
+        else
+            ψ₀ = initialize_mps(H,simul.bond_dim)
+        end
     else
-        ψ₀ = initialize_mps(H,simul.bond_dim)
+        ψ₀ = init_state
     end
     
     schmidtcut = 10.0^(-simul.svalue)
@@ -1475,6 +1498,7 @@ Extract the parameters from a params.jl file located at `path` in PyFoldHub form
 """
 function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range_J::Int64=1, 
                         range_U13::Int64=1, r_1111::Int64 = 1, r_112::Int64 = 1)
+    # Wmn should be rank 8 tensor (only one frequency point)
     include(path)
 
     B = size(Wmn)[5]
@@ -1492,11 +1516,7 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
     for i in 1:B
         for j in 1:B
             for r in 0:(range_t-1)
-                if isdefined(Main,:corr)
-                    t[i,j+r*B] = tmn[site_0+r,i,j] - corr[1,site_0+r,i,j] - corr[2,site_0+r,i,j]
-                else
-                    t[i,j+r*B] = tmn[site_0+r,i,j] - corr_G_HW[site_0+r,i,j] - corr_v_xc[site_0+r,i,j]
-                end
+                t[i,j+r*B] = tmn[site_0+r,i,j] + corr_H[site_0+r,i,j] #+ corr_G_HW[site_0+r,i,j] + corr_v_xc[site_0+r,i,j], check minus sign...
             end
             for r in 0:(range_u-1)
                 U[i,j+r*B] = Wmn[site_0,site_0,site_0+r,site_0+r,i,i,j,j]
@@ -1504,8 +1524,8 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
             for r in 0:(range_J-1)
                 if r!=0 || i!=j
                     J[i,j+r*B] = Wmn[site_0,site_0+r,site_0+r,site_0,i,j,j,i]
-                    if !(J[i,j+r*B] ≈ Wmn[site_0,site_0+r,site_0,site_0+r,j,i,j,i])
-                        error("J1 is not equal to J2.")
+                    if !(J[i,j+r*B] ≈ Wmn[site_0,site_0+r,site_0,site_0+r,i,j,i,j])
+                        error("J1 is not equal to J2 at (r,i,j)=($r,$i,$j).")
                     end
                 end
             end
@@ -1558,6 +1578,30 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
     end
 
     return t, U, J, U13_OS, U13_IS, U112, U1111
+end
+
+function save_state(ψ::InfiniteMPS, path::String, name::String)
+    path = joinpath(path,name)
+    mkdir(path)
+    for i in 1:length(ψ)
+        d = convert(Dict,ψ.AL[i])
+        @save joinpath(path,"state$i.jld2") d
+        println("State $i saved.")
+    end
+end
+
+function load_state(path::String)
+    entries = readdir(path)
+    file_count = count(entry -> isfile(joinpath(path, entry)), entries)
+
+    @load joinpath(path,"state1.jld2") d
+    A = [convert(TensorMap, d)]
+    for i in 2:file_count
+        @load joinpath(path,"state$i.jld2") d
+        push!(A, convert(TensorMap, d))
+    end
+
+    return InfiniteMPS(PeriodicArray(A))
 end
 
         
