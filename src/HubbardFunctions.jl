@@ -1229,10 +1229,23 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
                                     solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
     spin::Bool = get(simul.kwargs, :spin, false)
     S = ""
+    param_string = ""
+    if size(simul.u)[1] == 1
+        if hasproperty(simul, :J)
+            J = simul.J
+        else
+            J = 0
+        end
+        U13::Vector{Float64} = get(simul.kwargs, :U13, [0.0])
+        JMs::Tuple{Float64, Float64} = get(simul.kwargs, :JMs, (0.0,0.0))
+        J_inter = JMs[1]
+        Ms = JMs[2]
+        param_string = "t$(simul.t)u$(simul.u)J$(J)U$(U13)m$(J_inter)_$(Ms)_"
+    end
     if typeof(momenta)==Float64
-        momenta_string = "_mom=$momenta"
+        momenta_string = "_k=$momenta"
     else
-        momenta_string = "_mom=$(first(momenta))to$(last(momenta))div$(length(momenta))"
+        momenta_string = "_k=$(first(momenta))to$(last(momenta))div$(length(momenta))"
     end
     if hasproperty(simul, :Q)
         if !spin
@@ -1244,9 +1257,12 @@ function produce_excitations(simul::Simulation, momenta, nums::Int64;
     else
         charge_string = "f$(Int(charges[1]))su$(charges[2])"
     end
-
     code = get(simul.kwargs, :code, "")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="excitations_"*S*code*"_nums=$nums"*"charges="*charge_string*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
+    Prefix = "exc_"*S*param_string*code*"_N=$nums"*"c="*charge_string*momenta_string*"_tr=$trunc_dim"
+    Prefix = replace(Prefix, "__" => "_")
+    Prefix = replace(Prefix, "3.141592653589793" => "pi")
+
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix=Prefix, force=force) do cfg
         return compute_excitations(cfg, momenta, nums; charges=charges, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, solver=solver)
     end
     return data
@@ -1287,12 +1303,25 @@ function produce_domainwalls(simul::Simulation, momenta, nums::Int64;
                                     force::Bool=false, charges::Vector{Float64}=[0,0.0,1], 
                                     trunc_dim::Int64=0, trunc_scheme::Int64=0, shift=1,
                                     solver=Arnoldi(;krylovdim=30,tol=1e-6,eager=true))
-    spin::Bool = get(simul.kwargs, :spin, false)
+        spin::Bool = get(simul.kwargs, :spin, false)
     S = ""
+    param_string = ""
+    if size(simul.u)[1] == 1
+        if hasproperty(simul, :J)
+            J = simul.J
+        else
+            J = 0
+        end
+        U13::Vector{Float64} = get(simul.kwargs, :U13, [0.0])
+        JMs::Tuple{Float64, Float64} = get(simul.kwargs, :JMs, (0.0,0.0))
+        J_inter = JMs[1]
+        Ms = JMs[2]
+        param_string = "t$(simul.t)u$(simul.u)J$(J)U$(U13)m$(J_inter)_$(Ms)_"
+    end
     if typeof(momenta)==Float64
-        momenta_string = "_mom=$momenta"
+        momenta_string = "_k=$momenta"
     else
-        momenta_string = "_mom=$(first(momenta))to$(last(momenta))div$(length(momenta))"
+        momenta_string = "_k=$(first(momenta))to$(last(momenta))div$(length(momenta))"
     end
     if hasproperty(simul, :Q)
         if !spin
@@ -1304,9 +1333,12 @@ function produce_domainwalls(simul::Simulation, momenta, nums::Int64;
     else
         charge_string = "f$(Int(charges[1]))su$(charges[2])"
     end
-
     code = get(simul.kwargs, :code, "")
-    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix="DWs_"*S*code*"_nums=$nums"*"charges="*charge_string*momenta_string*"_trunc=$trunc_dim", force=force) do cfg
+    Prefix = "exc_"*S*param_string*code*"_N=$nums"*"c="*charge_string*momenta_string*"_tr=$trunc_dim"
+    Prefix = replace(Prefix, "__" => "_")
+    Prefix = replace(Prefix, "3.141592653589793" => "pi")
+
+    data, _ = produce_or_load(simul, datadir("sims", name(simul)); prefix=Prefix, force=force) do cfg
         return compute_excitations(cfg, momenta, nums; charges=charges, trunc_dim=trunc_dim, trunc_scheme=trunc_scheme, DW=true, shift=shift, solver=solver)
     end
     return data
