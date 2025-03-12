@@ -86,7 +86,7 @@ U112 = Dict((1,1,2,3) => 0.0, (1,2,4,2) => 0.0) # and so on ...
 U1111 = Dict((1,2,3,4) => 0.0, (3,2,4,1) => 0.0) # ...
 model = hf.MB_Sim(t, U, J, U13, P, Q, s, bond_dim; code = name, U112=U112, U1111=U1111)
 ```
-An index $i$ larger than $B$ correspond to band $i$ modulo $B$ on site $⌊i/B⌋$.
+An index $i$ larger than $B$ corresponds to band $i$ modulo $B$ on site $⌊i/B⌋$.
 
 > **NOTE:**
 > When the parameters are changed but you want to keep the name of the model the same, you should put ```force=true``` to overwrite the previous results, obtained with the old parameters. Be cautious for accidentally overwriting data that you want to keep.
