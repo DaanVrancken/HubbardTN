@@ -10,7 +10,7 @@ end
 
 export OB_Sim, MB_Sim, OBC_Sim, MBC_Sim
 export produce_groundstate, produce_excitations, produce_bandgap, produce_TruncState
-export dim_state, density_spin, density_state, plot_excitations, plot_spin
+export dim_state, density_spin, density_state, plot_excitations, plot_spin, extract_params, save_state, load_state
 
 using DrWatson
 using ThreadPinning
@@ -326,6 +326,18 @@ function Number(P,Q,spin)
     return n
 end
 
+function Sz(P, Q)
+    I, Ps = SymSpace(P, Q, true)
+ 
+    sz = TensorMap(zeros, ComplexF64, Ps ← Ps)
+ 
+    blocks(sz)[I((0, 0, 2*Q-P))] .= 0.0
+    blocks(sz)[I((1, 1, Q-P))] .= 0.5
+    blocks(sz)[I((1, -1, Q-P))] .= -0.5
+ 
+    return sz
+end
+
 function SymSpace()
     I = fℤ₂ ⊠ SU2Irrep
     Ps = Vect[I]((0, 0) => 2, (1, 1 // 2) => 1)
@@ -382,6 +394,9 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
     L = simul.period
     spin::Bool = get(simul.kwargs, :spin, false)
     U13::Vector{Float64} = get(simul.kwargs, :U13, [0.0])
+    JMs::Tuple{Float64, Float64} = get(simul.kwargs, :JMs, (0.0,0.0))
+    J_inter = JMs[1]
+    Ms = JMs[2]
 
     D_hop = length(t)
     D_int = length(u)
@@ -440,6 +455,11 @@ function hamiltonian(simul::Union{OB_Sim,OBC_Sim2})
                 h4 = @mpoham sum(0.5*U13[range_U13]*C1{i+range_U13,i} + 0.5*U13[range_U13]*C2{i+range_U13,i} for i in vertices(InfiniteChain(T)))
                 H += h3 + h4
             end
+        end
+        if Ms!=0.0 && spin
+            sz = Sz(P,Q)
+            h = @mpoham sum(J_inter*Ms*sz{vertex}*(-1)^i for (i, vertex) in enumerate(vertices(InfiniteChain(T))))
+            H += h
         end
     elseif D_hop==1 && D_int==1
         h = @mpoham sum(-t[1]*twosite{i,i+1} -t[1]*twosite{i,i+L} for i in vertices(InfiniteChain(T)))
@@ -1135,7 +1155,11 @@ function produce_groundstate(simul::Union{OB_Sim, OBC_Sim}; force::Bool=false)
     if spin
         S_spin = "spin_"
     end
-    S = "groundstate_"*S_spin*"t$(t)_u$(u)_J$(J)"
+    U13::Vector{Float64} = get(simul.kwargs, :U13, [0.0])
+    JMs::Tuple{Float64, Float64} = get(simul.kwargs, :JMs, (0.0,0.0))
+    J_inter = JMs[1]
+    Ms = JMs[2]
+    S = "groundstate_"*S_spin*"t$(t)_u$(u)_J$(J)_U13$(U13)_JMs$(J_inter)_$(Ms)"
     S = replace(S, ", " => "_")
     data, _ = produce_or_load(compute_groundstate, simul, datadir("sims", name(simul)); prefix=S, force=force)
     return data
@@ -1396,6 +1420,20 @@ function density_spin(ψ₀::InfiniteMPS, P::Int64, Q::Int64)
     end
 
     return Nup, Ndown
+end
+
+"""
+    calc_ms(model::Union{OB_Sim,MB_Sim})
+
+Compute the staggered magnetization of the ground state.
+"""
+function calc_ms(model::Union{OB_Sim,MB_Sim})
+    up, down = hf.density_spin(model)
+    Mag = up - down
+    if !all(x -> isapprox(abs(x),abs(Mag[1,1]),rtol=10^(-6)), vec(Mag))
+        @warn "Spin-density wave?"
+    end
+    return abs(Mag[1,1])
 end
 
 """
