@@ -1,16 +1,10 @@
 # HubbardTN
 
-This code base is using the [Julia Language](https://julialang.org/) and
-[DrWatson](https://juliadynamics.github.io/DrWatson.jl/stable/)
-to make a reproducible scientific project named
-> Hubbard
-
-It is authored by DaanVrancken.
+Contains code for constructing and solving general one-dimensional Hubbard models using matrix product states. The framework is built upon [MPSKit.jl](https://github.com/QuantumKitHub/MPSKit.jl) and [TensorKit](https://github.com/jutho/TensorKit.jl). The functionalities include constructing a Hubbard Hamiltonian with arbitrary interactions represented by the tensor U<sub>ijkl<sub>, as well as enabling hopping and interactions beyond nearest neighbors. Additionally, the framework supports U(1) symmetry for particle conservation and SU(2) spin symmetry. Check out the examples for concrete use-cases. More information can be found in the docs.
 
 To (locally) reproduce this project, do the following:
 
-0. Download this code base. Notice that raw data are typically not included in the
-   git-history and may need to be downloaded independently.
+0. Download this code base.
 1. Open a Julia console and do:
    ```
    julia> using Pkg

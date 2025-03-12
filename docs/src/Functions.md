@@ -23,8 +23,9 @@ HubbardFunctions.density_state
 HubbardFunctions.density_spin
 ```
 
-## Plotting
+## Tools
 ```@docs
 HubbardFunctions.plot_excitations
 HubbardFunctions.plot_spin
+HubbardFunctions.extract_params
 ```

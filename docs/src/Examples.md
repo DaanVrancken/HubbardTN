@@ -2,16 +2,17 @@
 Several examples can be found in the "examples" folder of the repository. In this tutorial, we elaborate on some of the details.
 
 ## Initialization
-The first few lines of the script will often look very similar. We start by importing the required packages.
+The first few lines of the script will often look very similar. We start by auto-activating the project "Hubbard" and enable local path handling from DrWatson
 ```
-using MPSKit, KrylovKit
-using Printf, Plots, Revise, DrWatson
+using DrWatson
+@quickactivate "Hubbard"
 ```
-Next, we auto-activate the project and enable local path handling from DrWatson
+Next, we import the required packages
 ```
-@quickactivate "project_name"
+using MPSKit
+using KrylovKit
 ```
-so that the command
+The command
 ```
 include(projectdir("src", "HubbardFunctions.jl"))
 import .HubbardFunctions as hf
@@ -25,19 +26,22 @@ Each Hubbard model is linked to a structure, storing all its major properties. T
 
 The most important properties of ```OB_Sim()``` are the hoppig ```t```, the Hubbard ```u```, the chemical potential ```µ```, and the filling defined by the ratio ```P```/```Q```.
 ```
+s = 2.5             # Schmidt cut value, determines bond dimension.
+P = 1;              # Filling of P/Q. P/Q = 1 is half-filling.
+Q = 1;
+bond_dim = 20;      # Initial bond dimension of the state. Impact on result is small as DMRG modifies it.
+
+# Define hopping, direct interaction, and chemical potential.
 t=[1.0, 0.1];
 u=[8.0];
 μ=0.0;
 
-P=1;
-Q=1;
+# Spin=false will use SU(2) spin symmetry, the exact spin configuration cannot be deduced.
+Spin = false
 
-s = 2.0;
-bond_dim = 20;
-
-model_OB = hf.OB_Sim(t, u, μ, P, Q, s, bond_dim; spin=false);
+model = hf.OB_Sim(t, u, μ, P, Q, s, bond_dim; spin=Spin);
 ```
-```t``` is a vector where the first element is the nearest neighbour hopping, the second the next-to-nearest neighbour hopping, and so on. Similarly, the first element of ```u``` is the on-site Coulomb repulsion and the second element the interaction between two neighbouring sites. 
+```t``` is a vector where the first element is the nearest neighbour hopping, the second the next-nearest neighbour hopping, and so on. Similarly, the first element of ```u``` is the on-site Coulomb repulsion and the second element the interaction between two neighbouring sites. 
 
 The Schmidt cut ```s``` determines to which value the bond dimension is grown by the iDMRG2 algorithm, while ```bond_dim``` is the maximal value used for the initialization of the MPS.
 
@@ -61,22 +65,28 @@ name = first(split(name_jl,"."))
 ```
 Then, we insert the parameters in the form of $B\times B$ matrices, where $B$ is the number of bands. For a 2-band model this looks as follows
 ```
-t_onsite = [-0.784  2.588; 2.588 -0.784];
-t_intersite = [0.0345 2.745; -0.036 0.0345];
-t = cat(t_onsite,t_intersite, dims=2)
-u = [9.86 5.7656; 5.7656 9.86];
-J = [0.0 0.096; 0.096 0.0];
-U13 = zeros(2,2);
-
-P = 1;
+s = 2.5             # Schmidt cut value, determines bond dimension.
+P = 1;              # Filling of P/Q. P/Q = 1 is half-filling.
 Q = 1;
+bond_dim = 20;      # Initial bond dimension of the state. Impact on result is small as DMRG modifies it.
 
-s=2.0;
-bond_dim = 20;
+# Define hopping, direct and exchange interaction matrices.
+t_onsite = [0.000 3.803 -0.548 0.000; 3.803 0.000 2.977 -0.501];
+t_intersite = [0.000 3.803 -0.548 0.000; 3.803 0.000 2.977 -0.501];
+t = cat(t_onsite,t_intersite, dims=2);
+U = [10.317 6.264 0.000 0.000; 6.264 10.317 6.162 0.000];
+J = [0.000 0.123 0.000 0.000; 0.123 0.000 0.113 0.000];
+U13 = zeros(2,2)
 
-model_MB = hf.MB_Sim(t, u, J, U13, P, Q, s, bond_dim; code = name, spin=false, force=false);
+model = hf.MB_Sim(t, U, J, U13, P, Q, s, bond_dim; code = name);
 ```
-Where the one-band model used vectors for ```t``` and ```u```, the multi-band model concatenates matrices horizontally. In addition, the exchange $J$ and $U_{ijjj}$ parameters, with zeros on the diagonals as these are included in ```u```, are implemented as well. Since those parameters are usually rather small, ```U13``` is an optional argument.
+Where the one-band model used vectors for ```t``` and ```u```, the multi-band model concatenates matrices horizontally. In addition, the exchange $J$ and $U_{ijjj}$ parameters, with zeros on the diagonals as these are included in ```u```, are implemented as well. Since those parameters are usually rather small, ```U13``` is an optional argument. Furthermore, parameters of the form $U_{ijkk}$ and $U_{ijkl}$ can be implemented by providing dictionaries as kwargs tot the structure
+```
+U112 = Dict((1,1,2,3) => 0.0, (1,2,4,2) => 0.0) # and so on ...
+U1111 = Dict((1,2,3,4) => 0.0, (3,2,4,1) => 0.0) # ...
+model = hf.MB_Sim(t, U, J, U13, P, Q, s, bond_dim; code = name, U112=U112,, U1111=U1111)
+```
+An index $i$ larger than $B$ correspond to band $i$ modulo $B$ on site $⌊i/B⌋$.
 
 > **NOTE:**
 > When the parameters are changed but you want to keep the name of the model the same, you should put ```force=true``` to overwrite the previous results, obtained with the old parameters. Be cautious for accidentally overwriting data that you want to keep.
@@ -97,7 +107,7 @@ E0 = expectation_value(ψ₀, H);
 E = real(E0)./length(H);
 println("Groundstate energy: $E")
 ```
-Other properties, such as the bond dimension, the electron density and spin density (if it was a spin dependent calculation), can be calculated as well.
+Other properties, such as the bond dimension, the electron density and spin density (if it was a calculation without SU(2) symmetry), can be calculated as well.
 ```
 println("Bond dimension: $(hf.dim_state(ψ₀))")
 println("Electron density: $(hf.density_state(ψ₀))")
@@ -118,7 +128,7 @@ println(Es)
 ```
 Excitations in the same sector as the ground state are found by defining ```charges``` as zeros. These charges refer to the difference with the ground state. Be aware that the meaning of the charges in this vector differ depending on the symmetries and thus on the type of model. ```OBC_Sim``` and ```MBC_Sim``` even have only two symmetries, and hence, two charges.
 
-For example, a spin symmetric, electron conserving model has symmetry $\mathbb{Z}_2\times SU(2)\times U(1)$. Sectors differing by adding a particle or hole differ by ```charges = [1,1/2,+/-1]```. These single-particle excitations allow for the calculation of the band gap.
+For example, a spin symmetric, electron conserving model has symmetry $\mathbb{Z}_2\times SU(2)\times U(1)$. Sectors obtained by adding a particle or hole differ by ```charges = [1,1/2,+/-1]```. These single-particle excitations allow for the calculation of the band gap.
 ```
 gap, k = hf.produce_bandgap(model)
 println("Band Gap for s=$s: $gap eV at momentum $k")
