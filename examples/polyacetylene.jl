@@ -2,14 +2,11 @@
 # INITIALISATION #
 ##################
 
+using DrWatson
+@quickactivate "Hubbard"
+
 using MPSKit
 using KrylovKit
-using Printf
-using Plots
-using Revise
-using DrWatson
-
-@quickactivate "Hubbard"
 
 include(projectdir("src", "HubbardFunctions.jl"))
 import .HubbardFunctions as hf
@@ -23,17 +20,15 @@ name = first(split(name_jl,"."))
 # DEFINE SYSTEM #
 #################
 
-s = 2.0
-
-t_OS = [-0.784  2.588; 2.588 -0.784];
-t_IS = [0.0345 2.745; -0.036 0.0345];
-t = cat(t_OS,t_IS, dims=2)
-U = [9.86 5.7656; 5.7656 9.86];
-J = [0.0 0.096; 0.096 0.0]
-
-P = 1;
+s = 2.5             # Schmidt cut value, determines bond dimension.
+P = 1;              # Filling of P/Q. P/Q = 1 is half-filling.
 Q = 1;
-bond_dim = 20;
+bond_dim = 20;      # Initial bond dimension of the state. Impact on result is small as DMRG modifies it.
+
+# Define hopping, direct and exchange interaction matrices.
+t = [0.000 3.803 -0.548 0.000; 3.803 0.000 2.977 -0.501];
+U = [10.317 6.264 0.000 0.000; 6.264 10.317 6.162 0.000];
+J = [0.000 0.123 0.000 0.000; 0.123 0.000 0.113 0.000];
 
 model = hf.MB_Sim(t, U, J, P, Q, s, bond_dim; code = name);
 
@@ -47,6 +42,7 @@ dictionary = hf.produce_groundstate(model);
 H = dictionary["ham"];
 E0 = expectation_value(ψ₀, H);
 E = sum(real(E0))./length(H);
+
 println("Groundstate energy: $E")
 println("Bond dimension: $(hf.dim_state(ψ₀))")
 
@@ -64,7 +60,7 @@ Es = exc["Es"];
 println("Excitation energies: ")
 println(Es)
 
-println("Exciton for s=$s: $(real(Es[1,1]))")
+println("Exciton energy for s=$s: $(real(Es[1,1]))")
 
 gap, k = hf.produce_bandgap(model)
 

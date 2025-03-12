@@ -2,14 +2,11 @@
 # INITIALISATION #
 ##################
 
+using DrWatson
+@quickactivate "Hubbard"
+
 using MPSKit
 using KrylovKit
-using Printf
-using Plots
-using Revise
-using DrWatson
-
-@quickactivate "Hubbard"
 
 include(projectdir("src", "HubbardFunctions.jl"))
 import .HubbardFunctions as hf
@@ -19,22 +16,20 @@ import .HubbardFunctions as hf
 # DEFINE SYSTEM #
 #################
 
-P=1;
-Q=1;
+s = 2.5             # Schmidt cut value, determines bond dimension.
+P = 1;              # Filling of P/Q. P/Q = 1 is half-filling.
+Q = 1;
+bond_dim = 20;      # Initial bond dimension of the state. Impact on result is small as DMRG modifies it.
 
+# Define hopping, direct interaction, and chemical potential.
 t=[1.0, 0.1];
 u=[8.0];
 μ=0.0;
 
-s = 2.0;
-bond_dim = 20;
+# Spin=false will use SU(2) spin symmetry, the exact spin configuration cannot be deduced.
+Spin = false
 
-model = hf.OB_Sim(t, u, μ, P, Q, s, bond_dim; spin=false);
-dictionary = hf.produce_groundstate(model; force=false);
-ψ₀ = dictionary["groundstate"];
-H = dictionary["ham"];
-E0 = expectation_value(ψ₀, H);
-sum(real(E0))/length(H)
+model = hf.OB_Sim(t, u, μ, P, Q, s, bond_dim; spin=Spin);
 
 
 ########################
@@ -45,10 +40,10 @@ dictionary = hf.produce_groundstate(model; force=false);
 ψ₀ = dictionary["groundstate"];
 H = dictionary["ham"];
 E0 = expectation_value(ψ₀, H);
-E = sum(real(E0))/length(H)
+E = sum(real(E0))/length(H);
 
 println("Groundstate energy: $E")
-println("Bond dimension: $(dim_state(ψ₀))")
+println("Bond dimension: $(hf.dim_state(ψ₀))")
 
 
 ########################
@@ -64,7 +59,7 @@ Es = exc["Es"];
 println("Excitation energies: ")
 println(Es)
 
-println("Exciton for s=$s: $(real(Es[1,1]))")
+println("Exciton energy for s=$s: $(real(Es[1,1]))")
 
 gap, k = hf.produce_bandgap(model)
 

@@ -8,7 +8,7 @@ println("
 # INITIALISATION #
 ##################
 
-Force = false
+Force = true
 tol = 1e-1
 
 model1 = hf.OB_Sim([1.0],[8.0], 0.0,1,1,2.0;spin=true)

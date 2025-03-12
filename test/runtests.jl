@@ -1,6 +1,8 @@
-using DrWatson, Test
-using MPSKit, KrylovKit, Printf
+using DrWatson
 @quickactivate "Hubbard"
+
+using Test, Printf
+using MPSKit, KrylovKit
 
 include(srcdir("HubbardFunctions.jl"))
 import .HubbardFunctions as hf

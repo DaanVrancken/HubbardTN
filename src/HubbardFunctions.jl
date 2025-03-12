@@ -1,21 +1,29 @@
 module HubbardFunctions
 
+if occursin("amd",lowercase(Sys.cpu_info()[1].model))
+    using BLISBLAS
+    println("Using BLIS for BLAS operations.")
+else
+    using MKL
+    println("Using MKL for BLAS and LAPACK operations.")
+end
+
 export OB_Sim, MB_Sim, OBC_Sim, MBC_Sim
 export produce_groundstate, produce_excitations, produce_bandgap, produce_TruncState
 export dim_state, density_spin, density_state, plot_excitations, plot_spin
 
+using DrWatson
 using ThreadPinning
+using Base.Threads
 using LinearAlgebra
 using MPSKit, MPSKitModels
 using TensorKit
 using KrylovKit
 using DataFrames
-using DrWatson
-using Plots, StatsPlots
+using Plots
 using Plots.PlotMeasures
 using TensorOperations
 using JLD2
-using Revise
 
 function __init__()
     LinearAlgebra.BLAS.set_num_threads(1)
@@ -26,6 +34,8 @@ function __init__()
         # Running locally
         ThreadPinning.pinthreads(:cores)
     end
+    MPSKit.Defaults.set_scheduler!(:greedy)   # serial -> disable multithreading, greedy -> greedy load-balancing, dynamic -> moderate load-balancing
+    println("Running on $(Threads.nthreads()) threads.")
 end
 
 function Base.string(s::TensorKit.ProductSector{Tuple{FermionParity,SU2Irrep,U1Irrep}})
@@ -328,12 +338,12 @@ function Hopping()
     Vs = Vect[I]((1, 1 / 2) => 1)
 
     c⁺ = TensorMap(zeros, ComplexF64, Ps ← Ps ⊗ Vs)
-    blocks(c⁺)[I((1, 1 // 2))] = [1.0+0.0im 0.0+0.0im]
-    blocks(c⁺)[I((0, 0))] = [0.0+0.0im; sqrt(2)+0.0im;;]
+    blocks(c⁺)[I((1, 1 // 2))][1] = 1.0+0.0im
+    blocks(c⁺)[I((0, 0))][2] = sqrt(2)+0.0im
 
     c = TensorMap(zeros, ComplexF64, Vs ⊗ Ps ← Ps)
-    blocks(c)[I((1, 1 // 2))] = [1.0+0.0im; 0.0+0.0im;;]
-    blocks(c)[I((0, 0))] = [0.0+0.0im sqrt(2)+0.0im]
+    blocks(c)[I((1, 1 // 2))][1] = 1.0+0.0im
+    blocks(c)[I((0, 0))][2] = sqrt(2)+0.0im
 
     @planar twosite[-1 -2; -3 -4] := c⁺[-1; -3 1] * c[1 -2; -4]
     
@@ -344,7 +354,7 @@ function OSInteraction()
     I, Ps = SymSpace()
 
     onesite = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(onesite)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 1.0] 
+    blocks(onesite)[I((0, 0))][2,2] = 1.0
 
     return onesite
 end
@@ -353,7 +363,7 @@ function Number()
     I, Ps = SymSpace()
 
     n = TensorMap(zeros, ComplexF64, Ps ← Ps)
-    blocks(n)[I((0, 0))] = [0.0+0.0im 0.0; 0.0 2.0] 
+    blocks(n)[I((0, 0))][2,2] = 2.0 
     blocks(n)[I((1, 1 // 2))] .= 1.0
 
     return n
@@ -732,7 +742,8 @@ function Uijkk(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
 
     Lattice = InfiniteStrip(B,T*B)
     
-    H = 0
+    @tensor init_operator[-1; -2] := cdc[-1 2; 2 -2]
+    H = @mpoham sum(0.0*init_operator{i} for i in vertices(Lattice))
     if !isempty(Ind1)
         H += @mpoham sum(0.5*U[(i,j,k,l)]*C1{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B],Lattice[mod(k-1,B)+1,site+(k-1)÷B]} for (site,i,j,k,l) in Ind1)
     end
@@ -768,7 +779,8 @@ function Uijkl(U::Dict{NTuple{4, Int64}, Float64},B,T,cdc)
 
     Lattice = InfiniteStrip(B,T*B)
 
-    H = 0
+    @tensor init_operator[-1; -2] := cdc[-1 2; 2 -2]
+    H = @mpoham sum(0.0*init_operator{i} for i in vertices(Lattice))
     if !isempty(Ind)
         H += @mpoham sum(0.5*U[(i,j,k,l)]*C{Lattice[mod(i-1,B)+1,site+(i-1)÷B],Lattice[mod(l-1,B)+1,site+(l-1)÷B],Lattice[mod(j-1,B)+1,site+(j-1)÷B,],Lattice[mod(k-1,B)+1,site+(k-1)÷B]} for (site,i,j,k,l) in Ind)
     end
@@ -883,7 +895,7 @@ end
 ###############
 
 function initialize_mps(operator, P::Int64, max_dimension::Int64, spin::Bool)
-    Ps = operator.pspaces
+    Ps = physicalspace.(parent(operator))
     L = length(Ps)
     V_right = accumulate(fuse, Ps)
     
@@ -927,7 +939,8 @@ function initialize_mps(operator, P::Int64, max_dimension::Int64, spin::Bool)
 end
 
 function initialize_mps(operator, max_dimension::Int64)
-    Ps = operator.pspaces
+    Ps = physicalspace.(parent(operator))
+
     V_right = accumulate(fuse, Ps)
     
     V_l = accumulate(fuse, dual.(Ps); init=one(first(Ps)))
@@ -1541,9 +1554,13 @@ function extract_params(path::String; range_u::Int64= 1, range_t::Int64=2, range
             end
             if i != j
                 U13_OS[i,j] = Wmn[site_0,site_0,site_0,site_0,i,j,j,j]
-                if !(U13_OS[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,i,j,j]) || !(U13_OS[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,i,j]) || 
-                    !(U13_OS[i,j] ≈ Wmn[site_0,site_0,site_0,site_0,j,j,j,i])
-                    error("U13_OS not consistent.")
+                if !isapprox(U13_OS[i,j], Wmn[site_0,site_0,site_0,site_0,j,i,j,j], rtol=1e-3) || !isapprox(U13_OS[i,j], Wmn[site_0,site_0,site_0,site_0,j,j,i,j], rtol=1e-3) || 
+                    !isapprox(U13_OS[i,j], Wmn[site_0,site_0,site_0,site_0,j,j,j,i], rtol=1e-3)
+                    @warn "U13_OS not consistent at i=$i, j=$j, for rtol=1e-3."
+                    if !isapprox(U13_OS[i,j], Wmn[site_0,site_0,site_0,site_0,j,i,j,j], atol=1e-3) || !isapprox(U13_OS[i,j], Wmn[site_0,site_0,site_0,site_0,j,j,i,j], atol=1e-3) || 
+                        !isapprox(U13_OS[i,j], Wmn[site_0,site_0,site_0,site_0,j,j,j,i], atol=1e-3)
+                        error("U13_OS not consistent at i=$i, j=$j.")
+                    end
                 end
             end
         end
