@@ -21,6 +21,7 @@ HubbardFunctions.produce_TruncState
 HubbardFunctions.dim_state
 HubbardFunctions.density_state
 HubbardFunctions.density_spin
+HubbardFunctions.calc_ms
 ```
 
 ## Tools
