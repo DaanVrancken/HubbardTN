@@ -4,8 +4,11 @@ Contains code for constructing and solving general one-dimensional Hubbard model
 
 To (locally) reproduce this project, do the following:
 
-0. Download this code base.
-1. Open a Julia console and do:
+1. Download this code base.
+   ```
+   git clone https://github.com/DaanVrancken/HubbardTN
+   ```
+2. Open a Julia console and do:
    ```
    julia> using Pkg
    julia> Pkg.add("DrWatson") # install globally, for using `quickactivate`
