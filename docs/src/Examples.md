@@ -58,7 +58,7 @@ model_OBC_2 = hf.OBC_Sim(t, u, μ, s, bond_dim; mu=true)
 If a filling is defined, the corresponding chemical potential is sought iteratively. Calculations without spin symmetry are not yet implemented.
 
 ## Multi-band
-In analogy with the one-band model, multi-band models can be constructed using ```MB_Sim()``` or ```MBC_Sim```. For the one-band model, DrWatson is able to find a unique name for the model based on its parameters. This name is later used to retrieve earlier computed results. For multi-band models, the number of parameters is simply too large and we have to provide a unique name ourselves, like the name of the script for instance.
+In analogy with the one-band model, multi-band models can be constructed using ```MB_Sim()``` or ```MBC_Sim()```. For the one-band model, DrWatson is able to find a unique name for the model based on its parameters. This name is later used to retrieve earlier computed results. For multi-band models, the number of parameters is simply too large and we have to provide a unique name ourselves, like the name of the script for instance.
 ```
 name_jl = last(splitpath(Base.source_path()))
 name = first(split(name_jl,"."))
@@ -71,8 +71,8 @@ Q = 1;
 bond_dim = 20;      # Initial bond dimension of the state. Impact on result is small as DMRG modifies it.
 
 # Define hopping, direct and exchange interaction matrices.
-t_onsite = [0.000 3.803 -0.548 0.000; 3.803 0.000 2.977 -0.501];
-t_intersite = [0.000 3.803 -0.548 0.000; 3.803 0.000 2.977 -0.501];
+t_onsite = [0.000 3.803; 3.803 0.000];
+t_intersite = [-0.548 0.000;2.977 -0.501];
 t = cat(t_onsite,t_intersite, dims=2);
 U = [10.317 6.264 0.000 0.000; 6.264 10.317 6.162 0.000];
 J = [0.000 0.123 0.000 0.000; 0.123 0.000 0.113 0.000];
@@ -88,17 +88,14 @@ model = hf.MB_Sim(t, U, J, U13, P, Q, s, bond_dim; code = name, U112=U112, U1111
 ```
 An index $i$ larger than $B$ corresponds to band $i$ modulo $B$ on site $⌊i/B⌋$.
 
-> **NOTE:**
-> When the parameters are changed but you want to keep the name of the model the same, you should put ```force=true``` to overwrite the previous results, obtained with the old parameters. Be cautious for accidentally overwriting data that you want to keep.
-
-For a ```MBC_Sim``` structure, we would have
+For a ```MBC_Sim()``` structure, we would have
 ```
 model_MBC = hf.MBC_Sim(t, u, J, s, bond_dim; code=name);
 ```
 The chemical potential is included in the diagonal terms of ```t_onsite```. Iterative determination of the chemical potential for a certain filling is not yet supported.
 
 ## Ground state
-The ground state of a model is computed (or loaded if it has been computed before) by the function ```produce_groundstate```. We can then extract the ground state energy as the expectation value of the Hamiltonian with respect to the ground state.
+The ground state of a model is computed (or loaded if it has been computed before) by the function ```produce_groundstate()```. We can then extract the ground state energy as the expectation value of the Hamiltonian with respect to the ground state.
 ```
 dictionary = hf.produce_groundstate(model);
 ψ₀ = dictionary["groundstate"];
@@ -113,6 +110,8 @@ println("Bond dimension: $(hf.dim_state(ψ₀))")
 println("Electron density: $(hf.density_state(ψ₀))")
 println("Spin density: $(hf.density_spin(ψ₀))")
 ```
+> **NOTE:**
+> When the parameters are changed but you want to keep the name of the model the same, you should put ```force=true``` to overwrite the previous results, obtained with the old parameters. Be cautious for accidentally overwriting data that you want to keep.
 
 ## Excited states
 To compute quasiparticle excitations we have to choose the momentum, the number of excitations, and the symmetry sectors. 
