@@ -1282,8 +1282,8 @@ function produce_bandgap(simul::Union{OB_Sim, MB_Sim}; resolution::Int64=5, forc
         error("Band gap for spin systems not implemented.")
     end
 
-    Exc_hole = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,-Q])
-    Exc_elec = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,Q])
+    Exc_hole = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,-1])
+    Exc_elec = produce_excitations(simul, momenta, 1; force=force, charges=[1,1/2,1])
 
     E_hole = real(Exc_hole["Es"])
     E_elec = real(Exc_elec["Es"])
