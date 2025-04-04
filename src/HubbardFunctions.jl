@@ -1275,7 +1275,6 @@ Compute or load the band gap of the desired model.
 """
 function produce_bandgap(simul::Union{OB_Sim, MB_Sim}; resolution::Int64=5, force::Bool=false)
     momenta = range(0, π, resolution)
-    Q = simul.Q
     spin::Bool = get(simul.kwargs, :spin, false)
 
     if spin
