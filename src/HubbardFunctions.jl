@@ -1203,9 +1203,9 @@ function compute_excitations(simul::Simulation, momenta, nums::Int64;
     if DW
         ψ_s = circshift(ψ, shift)
         envs_s = environments(ψ_s, H);
-        Es, qps = excitations(H, QuasiparticleAnsatz(solver), momenta./length(H), ψ, envs, ψ_s, envs_s; num=nums, sector=sector)
+        Es, qps = excitations(H, QuasiparticleAnsatz(solver, MPSKit.Defaults.alg_environments(;dynamic_tols=false)), momenta./length(H), ψ, envs, ψ_s, envs_s; num=nums, sector=sector)
     else
-        Es, qps = excitations(H, QuasiparticleAnsatz(solver), momenta./length(H), ψ, envs; num=nums, sector=sector)
+        Es, qps = excitations(H, QuasiparticleAnsatz(solver, MPSKit.Defaults.alg_environments(;dynamic_tols=false)), momenta./length(H), ψ, envs; num=nums, sector=sector)
     end
     
     return Dict("Es" => Es, "qps" => qps, "momenta" => momenta)
